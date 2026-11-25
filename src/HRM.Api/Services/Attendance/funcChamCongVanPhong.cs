@@ -38,7 +38,7 @@ namespace HRM.Api.Services.ChamCong
                 int nCurrentPage = TimKiem.CurrentPage ?? 0;
                 int nTabTrangThai = TimKiem.TabTrangThai ?? 0;
                 int PageSize = TimKiem.PageSize ?? 25;
-                IEnumerable<HRM_QuyTrinhXinDiMuonVeSom> result;
+                IQueryable<HRM_QuyTrinhXinDiMuonVeSom> result;
                 if (TimKiem.TabTrangThai != 3)
 
                     result = from a in db.HRM_QuyTrinhXinDiMuonVeSom

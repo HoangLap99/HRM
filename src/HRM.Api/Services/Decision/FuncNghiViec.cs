@@ -37,7 +37,7 @@ namespace HRM.Api.Services.NhanVien
             int nCurrentPage = TimKiem.CurrentPage ?? 0;
             int nTabTrangThai = TimKiem.TabTrangThai ?? 0;
             int PageSize = TimKiem.PageSize ?? 25;
-            IEnumerable<HRM_QuyetDinhNghiViec> result;
+            IQueryable<HRM_QuyetDinhNghiViec> result;
             if (TimKiem.TabTrangThai != 3)
 
                 result = from a in db.HRM_QuyetDinhNghiViec
@@ -75,20 +75,19 @@ namespace HRM.Api.Services.NhanVien
             }
             if (!string.IsNullOrEmpty(TimKiem.KeyWord))
             {
-                var listIdNhanViens = db.HRM_NhanVien_GiayToTuyThan.Where(a => a.isApDung == true && a.So.ToLower().Contains(TimKiem.CCCD.ToLower())).Select(a => a.IdNhanVien).ToList();
-                if (listIdNhanViens == null)
-                    listIdNhanViens = new List<string>();
-                listIdNhanViens.AddRange(db.HRM_NhanVien.Where(a => listIdNhanViens.Contains(a.IdGuid) || (a.TenDayDu.ToLower().Contains(TimKiem.KeyWord.ToLower().Trim()))).Select(a => a.IdGuid).Distinct().ToList());
-                if (listIdNhanViens == null)
-                    listIdNhanViens = new List<string>();
-                result = result.Where(a => listIdNhanViens.Contains(a.IdNhanVien) || a.SoQuyTrinh.ToLower().Contains(TimKiem.KeyWord.ToLower().Trim()));
+                var keywordLower = TimKiem.KeyWord.ToLower().Trim();
+                var listIdNhanViens = !string.IsNullOrEmpty(TimKiem.CCCD)
+                    ? db.HRM_NhanVien_GiayToTuyThan.AsNoTracking()
+                        .Where(a => a.isApDung == true && a.So.ToLower().Contains(TimKiem.CCCD.ToLower()))
+                        .Select(a => a.IdNhanVien).ToList()
+                    : new List<string>();
+                listIdNhanViens.AddRange(db.HRM_NhanVien.AsNoTracking()
+                    .Where(a => listIdNhanViens.Contains(a.IdGuid) || a.TenDayDu.ToLower().Contains(keywordLower))
+                    .Select(a => a.IdGuid).Distinct().ToList());
+                result = result.Where(a => listIdNhanViens.Contains(a.IdNhanVien) || a.SoQuyTrinh.ToLower().Contains(keywordLower));
             }
 
-            var itemList = result.Distinct().ToList();
-            int nSum = itemList.Count;
-            int nTotalPage = nSum / nCurrentPage;
-            PagingInfor paging = new PagingInfor(nCurrentPage, nSum, nTotalPage);
-            itemList = itemList.Skip(PageSize * (nCurrentPage - 1)).Take(PageSize).ToList();
+            var itemList = Paginate(result.AsNoTracking().Distinct(), nCurrentPage, PageSize, out PagingInfor paging);
             var listBoPhan = _CallWebService.GetDanhSachBoPhan(db);
             var listCongTy = _CallWebService.GetDanhSachDuAn(db);
             List<string> listIdNhanVien = itemList.Select(a => a.IdNhanVien).Distinct().ToList();
@@ -375,8 +374,8 @@ namespace HRM.Api.Services.NhanVien
             string sFileNameCopy = PathUploads + "DanhSachQuyetDinhNghiViecNam" + filenamegui + ".xlsx";
             dynamic data = new DynamicObject();
             File.Copy(fileName, sFileNameCopy, true);
-            Stream s = File.OpenRead(fileName);
-            ExcelPackage package = new ExcelPackage(s);
+            using Stream s = File.OpenRead(fileName);
+            using ExcelPackage package = new ExcelPackage(s);
             ExcelWorksheet sheet1 = package.Workbook.Worksheets.First();
             var listQuyetDinh = db.HRM_QuyetDinhNghiViec.Where(a => a.isKetThuc == true && a.NgayKy.Value.Year == Nam && a.NgayKy.Value.Month == Thang).ToList();
             if (listQuyetDinh != null && listQuyetDinh.Count > 0)
@@ -452,8 +451,8 @@ namespace HRM.Api.Services.NhanVien
             string sFileNameCopy = PathUploads + "BaoCaoTongHopNghi" + filenamegui + ".xlsx";
             File.Copy(fileName, sFileNameCopy, true);
             dynamic data = new DynamicObject();
-            Stream s = File.OpenRead(fileName);
-            ExcelPackage package = new ExcelPackage(s);
+            using Stream s = File.OpenRead(fileName);
+            using ExcelPackage package = new ExcelPackage(s);
             ExcelWorksheet sheet1 = package.Workbook.Worksheets.First();
             sheet1.Cells[3, 1].Value = "TỔNG HỢP NHÂN SỰ BHXH - BHBM THÁNG " + Thang + "/" + Nam;
             sheet1.Cells[4, 10].Value = "BHXH T" + Thang + "/" + Nam;

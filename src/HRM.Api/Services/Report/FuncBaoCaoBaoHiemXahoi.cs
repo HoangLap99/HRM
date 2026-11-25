@@ -51,7 +51,7 @@ namespace HRM.Api.Services.BaoCao
                 int nCurrentPage = TimKiem.CurrentPage ?? 0;
                 int nTabTrangThai = TimKiem.TabTrangThai ?? 0;
                 int PageSize = TimKiem.PageSize ?? 25;
-                IEnumerable<HRM_QuyTrinhXacNhanTangGiamBaoHiem> result;
+                IQueryable<HRM_QuyTrinhXacNhanTangGiamBaoHiem> result;
                 if (TimKiem.TabTrangThai != 3)
                     result = from a in db.HRM_QuyTrinhXacNhanTangGiamBaoHiem
                              join b in db.HRM_QuyTrinhXuLy on a.IdGuid equals b.IdTable
@@ -74,11 +74,7 @@ namespace HRM.Api.Services.BaoCao
                 if (TimKiem.IdCongTy != null && TimKiem.IdCongTy > 0)
                     result = result.Where(a => a.IdCongTy == TimKiem.IdCongTy);
 
-                var itemList = result.ToList();
-                int nSum = itemList.Count;
-                int nTotalPage = nSum / nCurrentPage;
-                PagingInfor paging = new PagingInfor(nCurrentPage, nSum, nTotalPage);
-                itemList = itemList.Skip(PageSize * (nCurrentPage - 1)).Take(PageSize).ToList();
+                var itemList = Paginate(result.AsNoTracking(), nCurrentPage, PageSize, out PagingInfor paging);
                 List<BoPhan> CongTys = _CallWebService.GetDanhSachDuAn(db);
                 List<BoPhan> BoPhans = _CallWebService.GetDanhSachBoPhan(db);
                 List<string> listidNv = itemList.Select(a => a.IdNguoiPheDuyet).Distinct().ToList();
@@ -675,7 +671,7 @@ namespace HRM.Api.Services.BaoCao
                 });
 
                 int nSum = itemList.Count();
-                int nTotalPage = nSum / nCurrentPage;
+                int nTotalPage = CalculateTotalPages(nSum, PageSize);
                 PagingInfor paging = new PagingInfor(nCurrentPage, nSum, nTotalPage);
                 itemList = itemList.Skip(PageSize * (nCurrentPage - 1)).Take(PageSize).ToList();
                 dynamic dnm = new DynamicObject();
@@ -773,7 +769,7 @@ namespace HRM.Api.Services.BaoCao
                     item.LoaiGiam = DefineData.GetLoaiTangGiamBH(item.LoaiGiam);
                 }
                 int nSum = itemList.Count();
-                int nTotalPage = nSum / nCurrentPage;
+                int nTotalPage = CalculateTotalPages(nSum, PageSize);
                 PagingInfor paging = new PagingInfor(nCurrentPage, nSum, nTotalPage);
                 itemList = itemList.Skip(PageSize * (nCurrentPage - 1)).Take(PageSize).ToList();
                 dynamic dnm = new DynamicObject();
@@ -967,8 +963,8 @@ namespace HRM.Api.Services.BaoCao
                 DateTime dt = DateTime.Now;
                 string sFileNameCopy = PathUploads + "DanhSachHuongLuongHuu_" + dt.ToOADate() + ".xlsx";
                 File.Copy(sFileName, sFileNameCopy, true);
-                Stream s = File.OpenRead(sFileNameCopy);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(sFileNameCopy);
+                using ExcelPackage package = new ExcelPackage(s);
                 ExcelWorksheet sheet1 = package.Workbook.Worksheets.First();
                 int stt = 1;
                 int nRow = 5;
@@ -1059,8 +1055,8 @@ namespace HRM.Api.Services.BaoCao
                 DateTime dt = DateTime.Now;
                 string sFileNameCopy = PathUploads + "DanhSachGiamBHXH_" + dt.ToOADate() + ".xlsx";
                 File.Copy(sFileName, sFileNameCopy, true);
-                Stream s = File.OpenRead(sFileNameCopy);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(sFileNameCopy);
+                using ExcelPackage package = new ExcelPackage(s);
                 ExcelWorksheet sheet1 = package.Workbook.Worksheets.First();
                 int stt = 1;
                 int nRow = 5;
@@ -1155,8 +1151,8 @@ namespace HRM.Api.Services.BaoCao
                 DateTime dt = DateTime.Now;
                 string sFileNameCopy = PathUploads + "DanhSachTangBHXH_" + dt.ToOADate() + ".xlsx";
                 File.Copy(sFileName, sFileNameCopy, true);
-                Stream s = File.OpenRead(sFileNameCopy);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(sFileNameCopy);
+                using ExcelPackage package = new ExcelPackage(s);
                 ExcelWorksheet sheet1 = package.Workbook.Worksheets.First();
                 List<HRM_TangBaoHiem> listtangbaohiem = _dbContext.HRM_TangBaoHiem.Where(x => Ids.Contains(x.IdGuid)).OrderBy(a => a.Loai).ToList();
                 List<HRM_NhanVien_GiayToTuyThan> listgiaytonhanvien = _dbContext.HRM_NhanVien_GiayToTuyThan.ToList();
@@ -1245,8 +1241,8 @@ namespace HRM.Api.Services.BaoCao
             try
             {
                 string sFileName = PathUploads + FileName;
-                Stream s = File.OpenRead(sFileName);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(sFileName);
+                using ExcelPackage package = new ExcelPackage(s);
                 ExcelWorksheet sheet1 = package.Workbook.Worksheets.First();
                 HashSet<string> validLoaiValues = new HashSet<string>
                 {
@@ -1306,8 +1302,8 @@ namespace HRM.Api.Services.BaoCao
             try
             {
                 string sFileName = PathUploads + FileName;
-                Stream s = File.OpenRead(sFileName);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(sFileName);
+                using ExcelPackage package = new ExcelPackage(s);
                 ExcelWorksheet sheet1 = package.Workbook.Worksheets.First();
                 HashSet<string> validLoaiValues = new HashSet<string>
                 {
@@ -1369,8 +1365,8 @@ namespace HRM.Api.Services.BaoCao
             try
             {
                 string sFileName = PathUploads + FileName;
-                Stream s = File.OpenRead(sFileName);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(sFileName);
+                using ExcelPackage package = new ExcelPackage(s);
                 ExcelWorksheet sheet1 = package.Workbook.Worksheets.First();
 
                 var listColumnName = new List<string>();
@@ -1470,8 +1466,8 @@ namespace HRM.Api.Services.BaoCao
                 DateTime dt = DateTime.Now;
                 string sFileNameCopy = PathUploads + "ThuVienDanhGiaDownload_" + dt.ToOADate() + ".xlsx";
                 File.Copy(sFileName, sFileNameCopy, true);
-                Stream s = File.OpenRead(sFileNameCopy);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(sFileNameCopy);
+                using ExcelPackage package = new ExcelPackage(s);
                 ExcelWorksheet sheet1 = package.Workbook.Worksheets.First();
                 if (!string.IsNullOrEmpty(IdNhanVien))
                 {
@@ -1505,8 +1501,8 @@ namespace HRM.Api.Services.BaoCao
                 string sFileName = HostingEnvironmentCompat.MapPath("~/MauBaoCao/MauBCquatrinhthamgiaBHXH.xlsx");
                 string sFileNameCopy = PathUploads + "ThuVienDanhGiaDownload_" + dt.ToOADate() + ".xlsx";
                 File.Copy(sFileName, sFileNameCopy, true);
-                Stream s = File.OpenRead(sFileNameCopy);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(sFileNameCopy);
+                using ExcelPackage package = new ExcelPackage(s);
                 ExcelWorksheet sheet1 = package.Workbook.Worksheets.First();
 
                 var QuaTrinhThamGias = _dbContext.HRM_QuaTrinhThamGiaBaoHiemXaHoi.ToList();
@@ -1731,8 +1727,8 @@ namespace HRM.Api.Services.BaoCao
                 DateTime dt = DateTime.Now;
                 string sFileNameCopy = PathUploads + "ThuVienDanhGiaDownload_" + dt.ToOADate() + ".xlsx";
                 File.Copy(sFileName, sFileNameCopy, true);
-                Stream s = File.OpenRead(sFileNameCopy);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(sFileNameCopy);
+                using ExcelPackage package = new ExcelPackage(s);
                 ExcelWorksheet sheet1 = package.Workbook.Worksheets.First();
 
                 var NhanVien = _dbContext.HRM_NhanVien.Find(IdNhanVien);
@@ -2067,8 +2063,8 @@ namespace HRM.Api.Services.BaoCao
                 DateTime dt = DateTime.Now;
                 string sFileNameCopy = PathUploads + "ThuVienDanhGiaDownload_" + dt.ToOADate() + ".xlsx";
                 File.Copy(sFileName, sFileNameCopy, true);
-                Stream s = File.OpenRead(sFileNameCopy);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(sFileNameCopy);
+                using ExcelPackage package = new ExcelPackage(s);
 
 
                 s.Close();
@@ -2090,8 +2086,8 @@ namespace HRM.Api.Services.BaoCao
             try
             {
                 string sFileName = PathUploads + FileName;
-                Stream s = File.OpenRead(sFileName);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(sFileName);
+                using ExcelPackage package = new ExcelPackage(s);
                 ExcelWorksheet sheet1 = package.Workbook.Worksheets.First();
 
                 var listColumnName = new List<string>();
@@ -2348,8 +2344,8 @@ namespace HRM.Api.Services.BaoCao
                 DateTime dt = DateTime.Now;
                 string sFileNameCopy = PathUploads + "ThuVienDanhGiaDownload_" + dt.ToOADate() + ".xlsx";
                 File.Copy(sFileName, sFileNameCopy, true);
-                Stream s = File.OpenRead(sFileNameCopy);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(sFileNameCopy);
+                using ExcelPackage package = new ExcelPackage(s);
 
 
                 s.Close();
@@ -2371,8 +2367,8 @@ namespace HRM.Api.Services.BaoCao
             try
             {
                 string sFileName = PathUploads + FileName;
-                Stream s = File.OpenRead(sFileName);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(sFileName);
+                using ExcelPackage package = new ExcelPackage(s);
                 ExcelWorksheet sheet1 = package.Workbook.Worksheets.First();
 
                 var listColumnName = new List<string>();

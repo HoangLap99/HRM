@@ -40,7 +40,7 @@ namespace HRM.Api.Services.PhucLoi
                 int nCurrentPage = TimKiem.CurrentPage ?? 0;
                 int nTabTrangThai = TimKiem.TabTrangThai ?? 0;
                 int PageSize = TimKiem.PageSize ?? 25;
-                IEnumerable<HRM_KeHoachPhucLoi> result;
+                IQueryable<HRM_KeHoachPhucLoi> result;
                 if (TimKiem.TabTrangThai != 3)
 
                     result = from a in db.HRM_KeHoachPhucLoi
@@ -71,11 +71,7 @@ namespace HRM.Api.Services.PhucLoi
                 if (TimKiem.IdCongTy > 0)
                     result = result.Where(a => a.IdCongTyEOS == TimKiem.IdCongTy);
 
-                var itemList = result.ToList();
-                int nSum = itemList.Count;
-                int nTotalPage = nSum / nCurrentPage;
-                PagingInfor paging = new PagingInfor(nCurrentPage, nSum, nTotalPage);
-                itemList = itemList.Skip(PageSize * (nCurrentPage - 1)).Take(PageSize).ToList();
+                var itemList = Paginate(result.AsNoTracking(), nCurrentPage, PageSize, out PagingInfor paging);
 
                 foreach (var item in itemList)
                 {
@@ -216,6 +212,7 @@ namespace HRM.Api.Services.PhucLoi
         public dynamic GetByIdKeHoachPhucLoi(string Id, ApplicationDbContext db)
         {
             HRM_KeHoachPhucLoi model = db.HRM_KeHoachPhucLoi.Find(Id);
+            if (model == null) return null;
             model.NgayLapUnix = dungchung.DateTimeToUnixTimeStamp(model.NgayLap);
             var listChiTiet = db.HRM_KeHoachPhucLoiChiTiet.Where(r => r.IdKeHoachPhucLoi == Id).ToList();
             foreach (var item in listChiTiet)
@@ -418,7 +415,7 @@ namespace HRM.Api.Services.PhucLoi
                 int nCurrentPage = TimKiem.CurrentPage ?? 0;
                 int nTabTrangThai = TimKiem.TabTrangThai ?? 0;
                 int PageSize = TimKiem.PageSize ?? 25;
-                IEnumerable<HRM_QuyTrinh_PhucLoi> result;
+                IQueryable<HRM_QuyTrinh_PhucLoi> result;
                 if (TimKiem.TabTrangThai != 3)
 
                     result = from a in db.HRM_QuyTrinh_PhucLoi
@@ -449,11 +446,7 @@ namespace HRM.Api.Services.PhucLoi
                 if (TimKiem.IdCongTy > 0)
                     result = result.Where(a => a.IdCongTyEOS == TimKiem.IdCongTy);
 
-                var itemList = result.ToList();
-                int nSum = itemList.Count;
-                int nTotalPage = nSum / nCurrentPage;
-                PagingInfor paging = new PagingInfor(nCurrentPage, nSum, nTotalPage);
-                itemList = itemList.Skip(PageSize * (nCurrentPage - 1)).Take(PageSize).ToList();
+                var itemList = Paginate(result.AsNoTracking(), nCurrentPage, PageSize, out PagingInfor paging);
 
 
                 foreach (var item in itemList)
@@ -621,6 +614,7 @@ namespace HRM.Api.Services.PhucLoi
         public dynamic GetByIdQuyTrinhPhucLoi(string Id, ApplicationDbContext db)
         {
             HRM_QuyTrinh_PhucLoi model = db.HRM_QuyTrinh_PhucLoi.Find(Id);
+            if (model == null) return null;
             model.NgayLapUnix = dungchung.DateTimeToUnixTimeStamp(model.NgayLap);
             var listChiTiet = db.HRM_QuyTrinh_PhucLoiChiTiet.Where(r => r.IdQuyTrinhPhucLoi == Id).ToList();
             foreach (var item in listChiTiet)
@@ -742,8 +736,8 @@ namespace HRM.Api.Services.PhucLoi
 
 
                 string pathTemplate = HostingEnvironmentCompat.MapPath("~/MauBaoCao/DanhSachTetThieuNhi.xlsx");
-                Stream s = File.OpenRead(pathTemplate);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(pathTemplate);
+                using ExcelPackage package = new ExcelPackage(s);
                 s.Close();
                 var sheet1 = package.Workbook.Worksheets[1];
                 int nRow = 4;
@@ -822,8 +816,8 @@ namespace HRM.Api.Services.PhucLoi
 
 
                 string pathTemplate = HostingEnvironmentCompat.MapPath("~/MauBaoCao/DanhSachTetTrungThu.xlsx");
-                Stream s = File.OpenRead(pathTemplate);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(pathTemplate);
+                using ExcelPackage package = new ExcelPackage(s);
                 s.Close();
                 var sheet1 = package.Workbook.Worksheets[1];
                 int nRow = 4;
@@ -874,8 +868,8 @@ namespace HRM.Api.Services.PhucLoi
 
                 var chucVus = _CallWebService.GetDanhSachChucVu(db);
                 string pathTemplate = HostingEnvironmentCompat.MapPath("~/MauBaoCao/DanhSachPhucLoi.xlsx");
-                Stream s = File.OpenRead(pathTemplate);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(pathTemplate);
+                using ExcelPackage package = new ExcelPackage(s);
                 s.Close();
                 var sheet1 = package.Workbook.Worksheets[1];
                 int nRow = 4;

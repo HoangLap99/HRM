@@ -47,7 +47,7 @@ namespace HRM.Api.Services.NhanVien
                 int nCurrentPage = TimKiem.CurrentPage ?? 0;
                 int nTabTrangThai = TimKiem.TabTrangThai ?? 0;
                 int PageSize = TimKiem.PageSize ?? 25;
-                IEnumerable<HRM_BoNhiemDieuDongDuAn> result;
+                IQueryable<HRM_BoNhiemDieuDongDuAn> result;
                 if (TimKiem.TabTrangThai != 3)
 
                     result = from a in db.HRM_BoNhiemDieuDongDuAn
@@ -80,11 +80,7 @@ namespace HRM.Api.Services.NhanVien
                     result = result.Where(a => a.IdCongTyEOS == TimKiem.IdCongTy);
                 if (TimKiem.IdBoPhan > 0)
                     result = result.Where(a => a.IdBoPhanEOSOld == TimKiem.IdBoPhan);
-                var itemList = result.ToList();
-                int nSum = itemList.Count;
-                int nTotalPage = nSum / nCurrentPage;
-                PagingInfor paging = new PagingInfor(nCurrentPage, nSum, nTotalPage);
-                itemList = itemList.Skip(PageSize * (nCurrentPage - 1)).Take(PageSize).ToList();
+                var itemList = Paginate(result.AsNoTracking(), nCurrentPage, PageSize, out PagingInfor paging);
                 var listBoPhan = _CallWebService.GetDanhSachBoPhan(db);
                 var listDuAn = _CallWebService.GetDanhSachDuAn(db);
 
@@ -737,7 +733,7 @@ namespace HRM.Api.Services.NhanVien
                 int nCurrentPage = TimKiem.CurrentPage ?? 0;
                 int nTabTrangThai = TimKiem.TabTrangThai ?? 0;
                 int PageSize = TimKiem.PageSize ?? 25;
-                IEnumerable<HRM_BoNhiemChucVu> result;
+                IQueryable<HRM_BoNhiemChucVu> result;
                 if (TimKiem.TabTrangThai != 3)
 
                     result = from a in db.HRM_BoNhiemChucVu
@@ -768,11 +764,7 @@ namespace HRM.Api.Services.NhanVien
                     result = result.Where(a => a.IdBoPhanEOSCu == TimKiem.IdBoPhanEOSCu);
 
                 }
-                var itemList = result.Distinct().ToList();
-                int nSum = itemList.Count;
-                int nTotalPage = nSum / nCurrentPage;
-                PagingInfor paging = new PagingInfor(nCurrentPage, nSum, nTotalPage);
-                itemList = itemList.Skip(PageSize * (nCurrentPage - 1)).Take(PageSize).ToList();
+                var itemList = Paginate(result.AsNoTracking().Distinct(), nCurrentPage, PageSize, out PagingInfor paging);
                 List<BoPhan> BoPhans = _CallWebService.GetDanhSachBoPhan(db);
                 var listChucDanh = _CallWebService.GetDanhSachChucDanh(db);
                 List<string> lstNguoiKy = itemList.Select(r => r.IdNguoiKy).ToList();

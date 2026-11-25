@@ -315,6 +315,7 @@ namespace HRM.Api.Services.BangLuong
         public dynamic GetQuyetToanNghiPhepById(string Id, ApplicationDbContext db)
         {
             var model = db.HRM_QuyetToanPhepNam.Find(Id);
+            if (model == null) return null;
             model.NgayQuyetToanUnix = dungchung.DateTimeToUnixTimeStamp(model.NgayQuyetToan);
             var BoPhans = _CallWebService.GetDanhSachBoPhan(db);
             var ChucVus = _CallWebService.GetDanhSachChucVu(db);

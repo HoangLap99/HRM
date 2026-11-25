@@ -67,6 +67,7 @@ namespace HRM.Api.Services.DinhBien
         public dynamic GetQuyTrinhDinhBien(string Id, ApplicationDbContext db)
         {
             HRM_QuyTrinhDinhBien model = db.HRM_QuyTrinhDinhBien.Find(Id);
+            if (model == null) return null;
             model.listQuyTrinhDinhBienChiTiet = db.HRM_QuyTrinhDinhBien_ChiTiet.Where(r => r.IdQuyTrinh == Id).ToList();
             model.NgayApDungUnix = DateTimeToUnixTimeStamp(model.NgayApDung);
             return model;

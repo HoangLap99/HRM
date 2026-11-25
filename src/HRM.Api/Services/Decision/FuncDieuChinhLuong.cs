@@ -51,7 +51,7 @@ namespace HRM.Api.Services.NhanVien
                 int nCurrentPage = TimKiem.CurrentPage ?? 0;
                 int PageSize = TimKiem.PageSize ?? 25;
                 int nTabTrangThai = TimKiem.TabTrangThai ?? 0;
-                IEnumerable<HRM_QuyetDinhDieuChinhLuong> result;
+                IQueryable<HRM_QuyetDinhDieuChinhLuong> result;
                 if (TimKiem.TabTrangThai != 3)
 
                     result = from a in db.HRM_QuyetDinhDieuChinhLuong
@@ -92,11 +92,7 @@ namespace HRM.Api.Services.NhanVien
                         listId = listBp.Select(a => a.IdQuyTrinh).Distinct().ToList();
                     result = result.Where(a => listId.Contains(a.IdGuid));
                 }
-                var itemList = result.ToList();
-                int nSum = itemList.Count;
-                int nTotalPage = nSum / nCurrentPage;
-                PagingInfor paging = new PagingInfor(nCurrentPage, nSum, nTotalPage);
-                itemList = itemList.Skip(PageSize * (nCurrentPage - 1)).Take(PageSize).ToList();
+                var itemList = Paginate(result.AsNoTracking(), nCurrentPage, PageSize, out PagingInfor paging);
                 //var lstIdNhanVien = itemList.Select(r => r.IdNhanVien).ToList();
                 //var lstNhanVien = db.HRM_NhanVien.Where(r => lstIdNhanVien.Contains(r.IdGuid)).ToList();
                 var listBoPhan = _CallWebService.GetDanhSachDuAn(db);
@@ -714,8 +710,8 @@ namespace HRM.Api.Services.NhanVien
             string pathTemplate = PathUploads + FileName;
             if (File.Exists(pathTemplate) == false)
                 return new MessageReturn(DefineData.eErrorMessage.LoiCapNhat, "Không tìm thấy file xlsx");
-            Stream s = File.OpenRead(pathTemplate);
-            ExcelPackage package = new ExcelPackage(s);
+            using Stream s = File.OpenRead(pathTemplate);
+            using ExcelPackage package = new ExcelPackage(s);
             var listPhuCap = db.HRM_dmPhuCap.ToList();
             int countPC = listPhuCap.Count;
             List<HRM_QuyetDinhDieuChinhLuong_NhanVien> ListResult = new List<HRM_QuyetDinhDieuChinhLuong_NhanVien>();
@@ -808,8 +804,8 @@ namespace HRM.Api.Services.NhanVien
             string pathTemplate = PathUploads + FileName;
             if (File.Exists(pathTemplate) == false)
                 return new MessageReturn(DefineData.eErrorMessage.LoiCapNhat, "Không tìm thấy file xlsx");
-            Stream s = File.OpenRead(pathTemplate);
-            ExcelPackage package = new ExcelPackage(s);
+            using Stream s = File.OpenRead(pathTemplate);
+            using ExcelPackage package = new ExcelPackage(s);
             var listPhuCap = db.HRM_dmPhuCap.ToList();
             int countPC = listPhuCap.Count;
             var listDuAn = _CallWebService.GetDanhSachDuAn(db);
@@ -941,8 +937,8 @@ namespace HRM.Api.Services.NhanVien
                     string pathTemplate = PathUploads + FileName;
                     if (File.Exists(pathTemplate) == false)
                         return new MessageReturn(DefineData.eErrorMessage.LoiCapNhat, "Không tìm thấy file xlsx");
-                    Stream s = File.OpenRead(pathTemplate);
-                    ExcelPackage package = new ExcelPackage(s);
+                    using Stream s = File.OpenRead(pathTemplate);
+                    using ExcelPackage package = new ExcelPackage(s);
                     var listPhuCap = db.HRM_dmPhuCap.ToList();
                     int countPC = listPhuCap.Count;
                     var listDuAn = _CallWebService.GetDanhSachDuAn(db);
@@ -1121,8 +1117,8 @@ namespace HRM.Api.Services.NhanVien
             var filenamegui = "Danh sách nhân viên điều chỉnh lương.xlsx";
             string sFileNameCopy = PathUploads + filenamegui;
             File.Copy(sFileName, sFileNameCopy, true);
-            Stream s = File.OpenRead(sFileName);
-            ExcelPackage package = new ExcelPackage(s);
+            using Stream s = File.OpenRead(sFileName);
+            using ExcelPackage package = new ExcelPackage(s);
             var sheet1 = package.Workbook.Worksheets.First();
             var listPhuCap = db.HRM_dmPhuCap.ToList();
             int col = 9;
@@ -1262,8 +1258,8 @@ namespace HRM.Api.Services.NhanVien
             var filenamegui = "Danh sách nhân viên điều chỉnh lương.xlsx";
             string sFileNameCopy = PathUploads + filenamegui;
             File.Copy(sFileName, sFileNameCopy, true);
-            Stream s = File.OpenRead(sFileName);
-            ExcelPackage package = new ExcelPackage(s);
+            using Stream s = File.OpenRead(sFileName);
+            using ExcelPackage package = new ExcelPackage(s);
             var sheet1 = package.Workbook.Worksheets["Sheet1"];
             var sheetPC = package.Workbook.Worksheets["Phụ Cấp"];
             var sheetdt = package.Workbook.Worksheets["definedata"];
@@ -1752,8 +1748,8 @@ namespace HRM.Api.Services.NhanVien
                 var filenamegui = sFile;
                 string sFileNameCopy = PathUploads + filenamegui;
                 File.Copy(sFileName, sFileNameCopy, true);
-                Stream s = File.OpenRead(sFileName);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(sFileName);
+                using ExcelPackage package = new ExcelPackage(s);
                 ExcelWorksheet sheet1 = package.Workbook.Worksheets.First();
 
                 #region header
@@ -1936,8 +1932,8 @@ namespace HRM.Api.Services.NhanVien
             var filenamegui = "DieuChinhBaoHiemXaHoiThang.xlsx";
             string sFileNameCopy = PathUploads + filenamegui;
             File.Copy(sFileName, sFileNameCopy, true);
-            Stream s = File.OpenRead(sFileName);
-            ExcelPackage package = new ExcelPackage(s);
+            using Stream s = File.OpenRead(sFileName);
+            using ExcelPackage package = new ExcelPackage(s);
             var sheet1 = package.Workbook.Worksheets.First();
             var DieuChinhLuongs = db.HRM_QuyetDinhDieuChinhLuong.Where(x => x.isKetThuc == true && x.NgayHieuLuc.Value.Year == Nam && x.NgayHieuLuc.Value.Month == Thang).ToList();
             sheet1.Cells[3, 1].Value = "ĐIỀU CHỈNH MỨC ĐÓNG BHXH TỪ THÁNG " + Thang + "/" + Nam;
@@ -2113,8 +2109,8 @@ namespace HRM.Api.Services.NhanVien
             var filenamegui = "TongHopDieuChinhLuongThang.xlsx";
             string sFileNameCopy = PathUploads + filenamegui;
             File.Copy(sFileName, sFileNameCopy, true);
-            Stream s = File.OpenRead(sFileName);
-            ExcelPackage package = new ExcelPackage(s);
+            using Stream s = File.OpenRead(sFileName);
+            using ExcelPackage package = new ExcelPackage(s);
             var sheet1 = package.Workbook.Worksheets.First();
             var DieuChinhLuongs = db.HRM_QuyetDinhDieuChinhLuong.Where(x =>/* x.IdCongTyEOS == IdCongTy && */x.isKetThuc == true && x.NgayHieuLuc.Value.Year == Nam && x.NgayHieuLuc.Value.Month == Thang).ToList();
             var BoNhiems = db.HRM_BoNhiemChucVu.Where(x => /*x.IdCongTyEOS == IdCongTy &&*/ x.isKetThuc == true && x.NgayBatDau.Year == Nam && x.NgayBatDau.Month == Thang).ToList();

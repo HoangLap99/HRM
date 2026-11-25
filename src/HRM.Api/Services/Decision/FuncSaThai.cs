@@ -41,7 +41,7 @@ namespace HRM.Api.Services.NhanVien
                 int nCurrentPage = TimKiem.CurrentPage ?? 0;
                 int nTabTrangThai = TimKiem.TabTrangThai ?? 0;
                 int PageSize = TimKiem.PageSize ?? 25;
-                IEnumerable<HRM_QuyetDinhSaThai> result;
+                IQueryable<HRM_QuyetDinhSaThai> result;
                 if (TimKiem.TabTrangThai != 3)
 
                     result = from a in db.HRM_QuyetDinhSaThai
@@ -74,11 +74,7 @@ namespace HRM.Api.Services.NhanVien
                 //    result = result.Where(a => a.IdBoPhanEOS == TimKiem.IdBoPhan);
 
 
-                var itemList = result.ToList();
-                int nSum = itemList.Count;
-                int nTotalPage = nSum / nCurrentPage;
-                PagingInfor paging = new PagingInfor(nCurrentPage, nSum, nTotalPage);
-                itemList = itemList.Skip(PageSize * (nCurrentPage - 1)).Take(PageSize).ToList();
+                var itemList = Paginate(result.AsNoTracking(), nCurrentPage, PageSize, out PagingInfor paging);
                 List<BoPhan> listBoPhan = _CallWebService.GetDanhSachBoPhan(db);
                 List<string> lstNguoiKy = itemList.Select(r => r.IdNguoiKy).ToList();
                 var Nhanviens = db.HRM_NhanVien.Where(r => lstNguoiKy.Contains(r.IdGuid)).ToList();

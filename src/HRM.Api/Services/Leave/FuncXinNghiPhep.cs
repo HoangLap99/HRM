@@ -101,7 +101,7 @@ namespace HRM.Api.Services.XinNghiPhep
                 int nCurrentPage = TimKiem.CurrentPage ?? 0;
                 int nTabTrangThai = TimKiem.TabTrangThai ?? 0;
                 int PageSize = TimKiem.PageSize ?? 25;
-                IEnumerable<HRM_QuyTrinhLamThemGio> result;
+                IQueryable<HRM_QuyTrinhLamThemGio> result;
 
                 if (TimKiem.TabTrangThai != 3)
 
@@ -128,27 +128,21 @@ namespace HRM.Api.Services.XinNghiPhep
                     result = result.Where(a => (!string.IsNullOrEmpty(a.SoQuyTrinh) && a.SoQuyTrinh.ToLower().Contains(TimKiem.KeyWord.ToLower().Trim())) || (!string.IsNullOrEmpty(a.TenNguoiDeNghi) && a.TenNguoiDeNghi.ToLower().Contains(TimKiem.KeyWord.ToLower().Trim())) || (!string.IsNullOrEmpty(a.NoiDung) && a.NoiDung.ToLower().Contains(TimKiem.KeyWord.ToLower().Trim())));
                 if (!string.IsNullOrEmpty(TimKiem.IdUser))
                 {
-
-                    var NhanVien = db.HRM_NhanVien.FirstOrDefault(a => a.IdGuid == TimKiem.IdUser);
-                    result = result.Where(a => !string.IsNullOrEmpty(a.IdNguoiDeNghi) && a.IdNguoiDeNghi == NhanVien.IdUser);
+                    var NhanVien = db.HRM_NhanVien.AsNoTracking().FirstOrDefault(a => a.IdGuid == TimKiem.IdUser);
+                    var idUserFilter = NhanVien?.IdUser;
+                    result = result.Where(a => !string.IsNullOrEmpty(a.IdNguoiDeNghi) && a.IdNguoiDeNghi == idUserFilter);
                 }
                 if (TimKiem.IdCongTy > 0)
                     result = result.Where(a => a.IdCongTy == TimKiem.IdCongTy);
-                result = result.ToList();
                 List<string> listId = new List<string>();
                 if (TimKiem.IdBoPhan > 0)
                 {
-
-                    var listBp = db.HRM_QuyTrinhBoPhan_BoPhan.Where(a => a.TableName == nameof(HRM_QuyTrinhLamThemGio) && a.IdBoPhan == TimKiem.IdBoPhan).ToList();
+                    var listBp = db.HRM_QuyTrinhBoPhan_BoPhan.AsNoTracking().Where(a => a.TableName == nameof(HRM_QuyTrinhLamThemGio) && a.IdBoPhan == TimKiem.IdBoPhan).ToList();
                     if (listBp != null && listBp.Count > 0)
                         listId = listBp.Select(a => a.IdQuyTrinh).Distinct().ToList();
-                    result = result.Where(a => listId.Contains(a.IdGuid)).ToList();
+                    result = result.Where(a => listId.Contains(a.IdGuid));
                 }
-                var itemList = result.Distinct().ToList();
-                int nSum = itemList.Count;
-                int nTotalPage = nSum / nCurrentPage;
-                PagingInfor paging = new PagingInfor(nCurrentPage, nSum, nTotalPage);
-                itemList = itemList.Skip(PageSize * (nCurrentPage - 1)).Take(PageSize).ToList();
+                var itemList = Paginate(result.AsNoTracking().Distinct(), nCurrentPage, PageSize, out PagingInfor paging);
 
                 CallWebService webService = _CallWebService;
                 List<BoPhan> BoPhans = webService.GetDanhSachBoPhan(db);
@@ -611,8 +605,8 @@ namespace HRM.Api.Services.XinNghiPhep
 
                 File.Copy(sFileName, sFileNameCopy, true);
 
-                Stream s = File.OpenRead(sFileName);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(sFileName);
+                using ExcelPackage package = new ExcelPackage(s);
                 ExcelWorksheet SheetQuyTrinh = package.Workbook.Worksheets["Quy Trình"];
                 ExcelWorksheet SheetNhanSu = package.Workbook.Worksheets["Nhân sự"];
                 //
@@ -711,8 +705,8 @@ namespace HRM.Api.Services.XinNghiPhep
             {
                 DateTime dt = DateTime.Now;
                 string sFileName = PathUploads + FileName;
-                Stream s = File.OpenRead(sFileName);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(sFileName);
+                using ExcelPackage package = new ExcelPackage(s);
                 ExcelWorksheet SheetQuyTrinh = package.Workbook.Worksheets["Quy Trình"];
                 ExcelWorksheet SheetNhanSu = package.Workbook.Worksheets["Nhân sự"];
                 //
@@ -835,8 +829,8 @@ namespace HRM.Api.Services.XinNghiPhep
                 var filenamegui = "QD_YeuCauLamThemGio.xlsx";
                 string sFileNameCopy = PathUploads + filenamegui;
                 File.Copy(sFileName, sFileNameCopy, true);
-                Stream s = File.OpenRead(sFileName);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(sFileName);
+                using ExcelPackage package = new ExcelPackage(s);
                 ExcelWorksheet sheet1 = package.Workbook.Worksheets["Mẫu"];
 
                 if (QuyTrinh.listUser != null && QuyTrinh.listUser.Count > 0)
@@ -903,8 +897,8 @@ namespace HRM.Api.Services.XinNghiPhep
                 var filenamegui = "Dangkylamthemgio.xlsx";
                 string sFileNameCopy = PathUploads + filenamegui;
                 File.Copy(sFileName, sFileNameCopy, true);
-                Stream s = File.OpenRead(sFileName);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(sFileName);
+                using ExcelPackage package = new ExcelPackage(s);
                 ExcelWorksheet sheet1 = package.Workbook.Worksheets[1];
                 s.Close();
                 byte[] bytee = package.GetAsByteArray();
@@ -935,8 +929,8 @@ namespace HRM.Api.Services.XinNghiPhep
                 var filenamegui = Guid.NewGuid().ToString() + ".xlsx";
                 string sFileNameCopy = PathUploads + filenamegui;
                 File.Copy(sFileName, sFileNameCopy, true);
-                Stream s = File.OpenRead(sFileName);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(sFileName);
+                using ExcelPackage package = new ExcelPackage(s);
                 ExcelWorksheet sheet1 = package.Workbook.Worksheets[2];
                 CallWebService callWeb = _CallWebService;
                 var listDmHt = callWeb.GetListDanhMucHinhThucNghi(db);
@@ -1290,7 +1284,7 @@ namespace HRM.Api.Services.XinNghiPhep
                 int nCurrentPage = TimKiem.CurrentPage ?? 0;
                 int nTabTrangThai = TimKiem.TabTrangThai ?? 0;
                 int PageSize = TimKiem.PageSize ?? 25;
-                IEnumerable<HRM_QuyTrinhXinNghiPhep> result;
+                IQueryable<HRM_QuyTrinhXinNghiPhep> result;
                 if (TimKiem.TabTrangThai != 3)
                     result = from a in db.HRM_QuyTrinhXinNghiPhep
                              join b in db.HRM_QuyTrinhXuLy on a.IdGuid equals b.IdTable
@@ -1321,12 +1315,8 @@ namespace HRM.Api.Services.XinNghiPhep
                 if (TimKiem.IdCongTy > 0)
                     result = result.Where(a => a.IdCongTy == TimKiem.IdCongTy);
                 if (!string.IsNullOrEmpty(TimKiem.IdUser))
-                    result = result.Where(a => !string.IsNullOrEmpty(a.IdNguoiDeNghi) && a.IdNguoiDeNghi == TimKiem.IdUser).ToList();
-                var itemList = result.Distinct().ToList();
-                int nSum = itemList.Count;
-                int nTotalPage = nSum / nCurrentPage;
-                PagingInfor paging = new PagingInfor(nCurrentPage, nSum, nTotalPage);
-                itemList = itemList.Skip(PageSize * (nCurrentPage - 1)).Take(PageSize).ToList();
+                    result = result.Where(a => !string.IsNullOrEmpty(a.IdNguoiDeNghi) && a.IdNguoiDeNghi == TimKiem.IdUser);
+                var itemList = Paginate(result.AsNoTracking().Distinct(), nCurrentPage, PageSize, out PagingInfor paging);
                 List<string> listIdQuyTrinh = itemList.Select(a => a.IdGuid).Distinct().ToList();
                 var listItem = db.HRM_QuyTrinhXinNghiPhep_ChiTiet.Where(a => listIdQuyTrinh.Contains(a.IdQuyTrinh)).ToList();
                 CallWebService webService = _CallWebService;
@@ -1766,8 +1756,8 @@ namespace HRM.Api.Services.XinNghiPhep
             var filenamegui = sFile;
             string sFileNameCopy = PathUploads + filenamegui;
             File.Copy(sFileName, sFileNameCopy, true);
-            Stream s = File.OpenRead(sFileName);
-            ExcelPackage package = new ExcelPackage(s);
+            using Stream s = File.OpenRead(sFileName);
+            using ExcelPackage package = new ExcelPackage(s);
             ExcelWorksheet sheet1 = package.Workbook.Worksheets.First();
             int nRow = 4;
             int STT = 1;
@@ -1949,8 +1939,8 @@ namespace HRM.Api.Services.XinNghiPhep
             var filenamegui = sFile;
             string sFileNameCopy = PathUploads + filenamegui;
             File.Copy(sFileName, sFileNameCopy, true);
-            Stream s = File.OpenRead(sFileName);
-            ExcelPackage package = new ExcelPackage(s);
+            using Stream s = File.OpenRead(sFileName);
+            using ExcelPackage package = new ExcelPackage(s);
             ExcelWorksheet sheet1 = package.Workbook.Worksheets.First();
             int nRow = 4;
             int STT = 1;

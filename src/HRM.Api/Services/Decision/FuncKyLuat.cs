@@ -145,7 +145,7 @@ namespace HRM.Api.Services.NhanVien
                 int nCurrentPage = TimKiem.CurrentPage ?? 1;
                 int PageSize = TimKiem.PageSize ?? 25;
                 int nTabTrangThai = TimKiem.TabTrangThai ?? 1;
-                IEnumerable<HRM_QuyetDinhKyLuat> result;
+                IQueryable<HRM_QuyetDinhKyLuat> result;
                 if (TimKiem.TabTrangThai != 3)
 
                     result = from a in db.HRM_QuyetDinhKyLuat
@@ -179,11 +179,7 @@ namespace HRM.Api.Services.NhanVien
                     result = result.Where(a => listId.Contains(a.IdGuid));
                 }
 
-                List<HRM_QuyetDinhKyLuat> itemList = result.ToList();
-                int nSum = itemList.Count;
-                int nTotalPage = nSum / nCurrentPage;
-                PagingInfor paging = new PagingInfor(nCurrentPage, nSum, nTotalPage);
-                itemList = itemList.Skip(PageSize * (nCurrentPage - 1)).Take(PageSize).ToList();
+                var itemList = Paginate(result.AsNoTracking(), nCurrentPage, PageSize, out PagingInfor paging);
                 List<BoPhan> BoPhans = _CallWebService.GetDanhSachBoPhan(db);
                 foreach (var item in itemList)
                 {
@@ -244,22 +240,22 @@ namespace HRM.Api.Services.NhanVien
                 }
                 item.lstBoPhan = quyetDinhKhenThuongBoPhans;
 
-                List<HRM_QuyetDinhKyLuatNhanVien> quyetDinhKhenThuongNhanViens = db.HRM_QuyetDinhKyLuatNhanVien.Where(x => x.IdQuyetDinhKyLuat == Id).ToList();
-                var listNhanVien = db.HRM_NhanVien.ToList();
+                List<HRM_QuyetDinhKyLuatNhanVien> quyetDinhKhenThuongNhanViens = db.HRM_QuyetDinhKyLuatNhanVien.AsNoTracking().Where(x => x.IdQuyetDinhKyLuat == Id).ToList();
+                var idsNv = quyetDinhKhenThuongNhanViens.Select(x => x.IdNhanVien).Where(x => !string.IsNullOrEmpty(x)).Distinct().ToList();
+                var nhanVienDict = db.HRM_NhanVien.AsNoTracking().Where(x => idsNv.Contains(x.IdGuid)).ToDictionary(x => x.IdGuid);
+                var boPhanDict = listBoPhan.GroupBy(x => x.Id).ToDictionary(g => g.Key, g => g.First().TenBoPhan);
+                var chucDanhDict = listChucDanh.GroupBy(x => x.Id).ToDictionary(g => g.Key, g => g.First().Ten);
                 foreach (var quyetDinh in quyetDinhKhenThuongNhanViens)
                 {
-                    HRM_NhanVien nv = listNhanVien.FirstOrDefault(x => x.IdGuid == quyetDinh.IdNhanVien);
-                    if (nv != null)
+                    if (quyetDinh.IdNhanVien != null && nhanVienDict.TryGetValue(quyetDinh.IdNhanVien, out var nv))
                     {
                         quyetDinh.TenNhanVien = nv.TenDayDu;
                         quyetDinh.MaNhanVien = nv.MaNhanVien;
+                        if (chucDanhDict.TryGetValue(nv.IdChucDanh, out var tenCd))
+                            quyetDinh.TenChucDanh = tenCd;
+                        if (boPhanDict.TryGetValue(nv.IdBoPhanEOS, out var tenBp))
+                            quyetDinh.TenBoPhan = tenBp;
                     }
-                    var ChucDanh = listChucDanh.FirstOrDefault(x => x.Id == nv.IdChucDanh);
-                    if (ChucDanh != null)
-                        quyetDinh.TenChucDanh = ChucDanh.Ten;
-                    BoPhan bp = listBoPhan.FirstOrDefault(x => x.Id == nv.IdBoPhanEOS);
-                    if (bp != null)
-                        quyetDinh.TenBoPhan = bp.TenBoPhan;
                 }
                 item.lstNhanVien = quyetDinhKhenThuongNhanViens;
                 item.lstFileDinhKem = GetListFileDinhKem(db, DefineData.eTable.HRM_QuyetDinhKyLuat.ToString(), item.IdGuid);
@@ -370,8 +366,8 @@ namespace HRM.Api.Services.NhanVien
             long IdCongTyEOS = dyn.IdCongTyEOS ?? 0;
             string sFileName = HostingEnvironmentCompat.MapPath("~/MauBaoCao/BaoCaoQuyetDinhKyLuat.xlsx");
             int Nam = dyn.Nam ?? 0;
-            Stream s = File.OpenRead(sFileName);
-            ExcelPackage package = new ExcelPackage(s);
+            using Stream s = File.OpenRead(sFileName);
+            using ExcelPackage package = new ExcelPackage(s);
             ExcelWorksheet sheet1 = package.Workbook.Worksheets[1];
             s.Close();
             int nRow = 4;

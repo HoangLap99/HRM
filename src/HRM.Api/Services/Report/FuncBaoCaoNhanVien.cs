@@ -58,8 +58,8 @@ namespace HRM.Api.Services.BaoCao
 
             string pathTemplate = HostingEnvironmentCompat.MapPath("~/MauBaoCao/BaoCaoTongHopNhansu.xlsx");
 
-            Stream s = File.OpenRead(pathTemplate);
-            ExcelPackage package = new ExcelPackage(s);
+            using Stream s = File.OpenRead(pathTemplate);
+            using ExcelPackage package = new ExcelPackage(s);
             s.Close();
             var sheet1 = package.Workbook.Worksheets[1];
             int nRow = 5;
@@ -456,8 +456,8 @@ namespace HRM.Api.Services.BaoCao
 
             string pathTemplate = HostingEnvironmentCompat.MapPath("~/MauBaoCao/BaoCaoThongTinQuanHeGiaDinhNhanVien.xlsx");
 
-            Stream s = File.OpenRead(pathTemplate);
-            ExcelPackage package = new ExcelPackage(s);
+            using Stream s = File.OpenRead(pathTemplate);
+            using ExcelPackage package = new ExcelPackage(s);
             s.Close();
             var sheet1 = package.Workbook.Worksheets[1];
             int nRow = 5;
@@ -605,8 +605,8 @@ namespace HRM.Api.Services.BaoCao
 
             string pathTemplate = HostingEnvironmentCompat.MapPath("~/MauBaoCao/BaoCaoBangCapChungChiNhanVien.xlsx");
 
-            Stream s = File.OpenRead(pathTemplate);
-            ExcelPackage package = new ExcelPackage(s);
+            using Stream s = File.OpenRead(pathTemplate);
+            using ExcelPackage package = new ExcelPackage(s);
             s.Close();
             var sheet1 = package.Workbook.Worksheets[1];
             int nRow = 6;
@@ -705,8 +705,8 @@ namespace HRM.Api.Services.BaoCao
 
             string pathTemplate = HostingEnvironmentCompat.MapPath("~/MauBaoCao/BaoCaoNhanVienTheoPhanLoai.xlsx");
 
-            Stream s = File.OpenRead(pathTemplate);
-            ExcelPackage package = new ExcelPackage(s);
+            using Stream s = File.OpenRead(pathTemplate);
+            using ExcelPackage package = new ExcelPackage(s);
             s.Close();
             var sheet1 = package.Workbook.Worksheets[1];
             int nRow = 5;

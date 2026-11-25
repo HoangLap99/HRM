@@ -55,22 +55,13 @@ namespace HRM.Api.Services
             return result;
         }
 
-        public static List<HRM_FileDinhKem> GetListFileDinhKem(ApplicationDbContext db, string IdTable, string eTable)
+        private static void PopulateFileLinks(IEnumerable<HRM_FileDinhKem> tepDinhKems)
         {
-
-            List<HRM_FileDinhKem> TepDinhKems = db.HRM_FileDinhKem.Where(x => x.idItem == IdTable && x.TableName == eTable).OrderByDescending(x => x.Created).ToList();
-
-            int STT = 1;
-
-            foreach (HRM_FileDinhKem item in TepDinhKems)
+            foreach (HRM_FileDinhKem item in tepDinhKems)
             {
-
-                //string sFileName = Path.Combine(Directory.GetCurrentDirectory(), "uploaded") + item.FileNameGUI;
                 string sFileName = Path.Combine(HostingEnvironmentCompat.PathUploads) + item.FileNameGUI;
-                if (File.Exists(sFileName) == false)
-                    sFileName = Path.Combine(HostingEnvironmentCompat.PathUploads) + item.FileNameGUI;
-                string duoi = item.FileNameGUI.Split('.')[1];
-                string name=Guid.NewGuid().ToString();
+                string duoi = Path.GetExtension(item.FileNameGUI)?.TrimStart('.') ?? string.Empty;
+                string name = Guid.NewGuid().ToString();
                 if (!String.IsNullOrEmpty(item.FileName))
                 {
                     item.Link = "/uploader/DownloadFile?filename=" + HttpUtility.UrlEncode(dungchung.Base64Encode(item.FileName))
@@ -78,12 +69,31 @@ namespace HRM.Api.Services
                     item.LinkDocView = "docviewer/?filename=" + HttpUtility.UrlEncode(dungchung.Base64Encode(name + "." + duoi))
                            + "&path=" + dungchung.Base64Encode(sFileName);
                 }
-                STT++;
-
-
             }
+        }
 
+        public static List<HRM_FileDinhKem> GetListFileDinhKem(ApplicationDbContext db, string IdTable, string eTable)
+        {
+            List<HRM_FileDinhKem> TepDinhKems = db.HRM_FileDinhKem.AsNoTracking()
+                .Where(x => x.idItem == IdTable && x.TableName == eTable)
+                .OrderByDescending(x => x.Created)
+                .ToList();
+            PopulateFileLinks(TepDinhKems);
             return TepDinhKems;
+        }
+
+        public static ILookup<string, HRM_FileDinhKem> GetListFileDinhKemByIds(ApplicationDbContext db, IEnumerable<string> itemIds, string eTable)
+        {
+            var ids = itemIds?.Where(id => !string.IsNullOrEmpty(id)).Distinct().ToList();
+            if (ids == null || ids.Count == 0)
+                return Enumerable.Empty<HRM_FileDinhKem>().ToLookup(x => x.idItem);
+
+            var files = db.HRM_FileDinhKem.AsNoTracking()
+                .Where(x => x.TableName == eTable && ids.Contains(x.idItem))
+                .OrderByDescending(x => x.Created)
+                .ToList();
+            PopulateFileLinks(files);
+            return files.ToLookup(x => x.idItem);
         }
         public static void SetFileDinhKem(ApplicationDbContext db, List<HRM_FileDinhKem> listFile, string eTable, string IdTable)
         {

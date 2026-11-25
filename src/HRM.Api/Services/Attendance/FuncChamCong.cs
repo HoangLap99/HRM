@@ -715,7 +715,7 @@ namespace HRM.Api.Services
             int CurrentPage = itemTimKiem.CurrentPage ?? 1;
             int PageSize = itemTimKiem.PageSize ?? 15;
 
-            IEnumerable<HRM_ChamCong_Detail> listChamCongDaDuyet = from a in db.HRM_ChamCong_Detail
+            IQueryable<HRM_ChamCong_Detail> listChamCongDaDuyet = from a in db.HRM_ChamCong_Detail
                                                                    where (itemTimKiem.IdCongTyEOS == 0 || a.IdCongTyEOS == itemTimKiem.IdCongTyEOS)
                                                                  && a.Thang == itemTimKiem.Thang && a.Nam == itemTimKiem.Nam && a.isKetThuc == true
                                                                    select a;
@@ -785,8 +785,8 @@ namespace HRM.Api.Services
 
                     //HDFile file = JsonConvert.DeserializeObject<HDFile>(dyn.file.ToString());
                     string pathTemplate = PathUploads + FileName;
-                    Stream s = File.OpenRead(pathTemplate);
-                    ExcelPackage package = new ExcelPackage(s);
+                    using Stream s = File.OpenRead(pathTemplate);
+                    using ExcelPackage package = new ExcelPackage(s);
                     s.Close();
                     var sheet1 = package.Workbook.Worksheets[1];
                     int row = 5;
@@ -963,13 +963,15 @@ namespace HRM.Api.Services
                     db.HRM_ChamCong_NhanVien_ThoiGian_BoPhan.RemoveRange(lstItemChamCongNhanVienThoiGianCu);
                     db.HRM_ChamCong_NhanVien_ThoiGian_BoPhan.AddRange(listNhanVienChamCongNew);
                     db.SaveChanges();
+                    dbContextTransaction.Commit();
 
-                    return new MessageReturn(DefineData.eErrorMessage.CapNhatThanhCong, "Import thÃ nh cÃ´ng file cháº¥m cÃ´ng");
+                    return new MessageReturn(DefineData.eErrorMessage.CapNhatThanhCong, "Import thành công file chấm công");
                 }
 
                 catch (Exception ex)
                 {
-                    return new MessageReturn(DefineData.eErrorMessage.LoiCapNhat, "CÃ³ lá»—i xáº£y ra" + ex.ToString());
+                    dbContextTransaction.Rollback();
+                    return new MessageReturn(DefineData.eErrorMessage.LoiCapNhat, "Có lỗi xảy ra" + ex.ToString());
                 }
             }
         }
@@ -985,8 +987,8 @@ namespace HRM.Api.Services
                 var filenamegui = "Bangchamcong.xlsx";
                 string sFileNameCopy = PathUploads + filenamegui;
                 File.Copy(sFileName, sFileNameCopy, true);
-                Stream s = File.OpenRead(sFileName);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(sFileName);
+                using ExcelPackage package = new ExcelPackage(s);
                 ExcelWorksheet sheet1 = package.Workbook.Worksheets.First();
 
                 byte[] bytee = package.GetAsByteArray();
@@ -1029,11 +1031,15 @@ namespace HRM.Api.Services
                 List<HRM_ChamCong_Detail> listItem = GetPagedWorkflowList(query, db, nTabTrangThai, nCurrentPage, nPageSize, out PagingInfor paging);
                 if (nTabTrangThai == -1)
                     return paging.TotalItem;
-                var lstDanhMucDotChamCong = db.HRM_dmDotChamCongThang.ToList();
+                var dotChamCongById = db.HRM_dmDotChamCongThang.AsNoTracking().ToDictionary(r => r.IdGuid, r => r.Ten);
+                var detailIds = listItem.Select(x => x.IdGuid).Where(x => !string.IsNullOrEmpty(x)).Distinct().ToList();
+                var boPhanByDetail = detailIds.Count > 0
+                    ? db.HRM_ChamCong_BoPhan.AsNoTracking().Where(r => detailIds.Contains(r.IdChamCongDetail)).ToLookup(r => r.IdChamCongDetail)
+                    : Enumerable.Empty<HRM_ChamCong_BoPhan>().ToLookup(r => r.IdChamCongDetail);
                 foreach (var item in listItem)
                 {
-                    item.lstChamCongBoPhan = db.HRM_ChamCong_BoPhan.Where(r => r.IdChamCongDetail == item.IdGuid).ToList();
-                    item.TenDanhMucDotChamCong = lstDanhMucDotChamCong.Where(r => r.IdGuid == item.IdDanhMucDotChamCongThang).Select(r => r.Ten).FirstOrDefault();
+                    item.lstChamCongBoPhan = boPhanByDetail[item.IdGuid].ToList();
+                    item.TenDanhMucDotChamCong = !string.IsNullOrEmpty(item.IdDanhMucDotChamCongThang) && dotChamCongById.TryGetValue(item.IdDanhMucDotChamCongThang, out var tenDot) ? tenDot : null;
                 }
                 //foreach (var item in listItem)
                 //{
@@ -1194,7 +1200,7 @@ namespace HRM.Api.Services
                 int nCurrentPage = TimKiem.CurrentPage ?? 0;
                 int nTabTrangThai = TimKiem.TabTrangThai ?? 0;
                 int PageSize = TimKiem.PageSize ?? 25;
-                IEnumerable<HRM_BangChamCong> result;
+                IQueryable<HRM_BangChamCong> result;
                 if (TimKiem.TabTrangThai != 3)
 
                     result = from a in db.HRM_BangChamCong
@@ -1636,8 +1642,8 @@ namespace HRM.Api.Services
                 DateTime dTuNgay = dungchung.UnixTimeStampToDateTime(TuNgay);
                 DateTime dDenNgay = dungchung.UnixTimeStampToDateTime(DenNgay);
                 string pathTemplate = PathUploads + FileName;
-                Stream s = File.OpenRead(pathTemplate);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(pathTemplate);
+                using ExcelPackage package = new ExcelPackage(s);
 
                 var sheet1 = package.Workbook.Worksheets.First();
                 int row = 4;
@@ -1769,8 +1775,8 @@ namespace HRM.Api.Services
                 DateTime dTuNgay = dungchung.UnixTimeStampToDateTime(TuNgay);
                 DateTime dDenNgay = dungchung.UnixTimeStampToDateTime(DenNgay);
                 string pathTemplate = PathUploads + FileName;
-                Stream s = File.OpenRead(pathTemplate);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(pathTemplate);
+                using ExcelPackage package = new ExcelPackage(s);
                 var listUserDuAn = _CallWebService.GetListUserNhanSuDuAnTheoThoiGian(IdCongTy, TuNgay, DenNgay, db);
                 List<string> listIdUser = new List<string>();
                 if (listUserDuAn != null && listUserDuAn.Count > 0)
@@ -3884,8 +3890,8 @@ namespace HRM.Api.Services
                 var filenamegui = "TheoDoiChamCong.xlsx";
                 string sFileNameCopy = PathUploads + filenamegui;
                 File.Copy(sFileName, sFileNameCopy, true);
-                Stream s = File.OpenRead(sFileName);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(sFileName);
+                using ExcelPackage package = new ExcelPackage(s);
                 ExcelWorksheet sheet1 = package.Workbook.Worksheets.First();
                 timkiem.CurrentPage = 0;
                 List<HRM_BangChamCong_NhanVien_Ngay> listData = GetThoiGianChamCong(timkiem, db);
@@ -3996,8 +4002,8 @@ namespace HRM.Api.Services
                 var filenamegui = "BangChamCongNhanVienThang.xlsx";
                 string sFileNameCopy = PathUploads + filenamegui;
                 File.Copy(sFileName, sFileNameCopy, true);
-                Stream s = File.OpenRead(sFileName);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(sFileName);
+                using ExcelPackage package = new ExcelPackage(s);
                 ExcelWorksheet sheet1 = package.Workbook.Worksheets.First();
                 if (listNhanVien != null && listNhanVien.Count > 0)
                 {
@@ -5100,8 +5106,8 @@ namespace HRM.Api.Services
                 var filenamegui = "TongHopBangChamCong.xlsx";
                 string sFileNameCopy = PathUploads + filenamegui;
                 File.Copy(sFileName, sFileNameCopy, true);
-                Stream s = File.OpenRead(sFileName);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(sFileName);
+                using ExcelPackage package = new ExcelPackage(s);
                 ExcelWorksheet sheet1 = package.Workbook.Worksheets.First();
 
                 #region header
@@ -5795,8 +5801,8 @@ namespace HRM.Api.Services
                 var filenamegui = sFile;
                 string sFileNameCopy = PathUploads + filenamegui;
                 File.Copy(sFileName, sFileNameCopy, true);
-                Stream s = File.OpenRead(sFileName);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(sFileName);
+                using ExcelPackage package = new ExcelPackage(s);
                 ExcelWorksheet sheet1 = package.Workbook.Worksheets["Tá»•ng há»£p tÄƒng ca"];
                 ExcelWorksheet sheet2 = package.Workbook.Worksheets["CÃ´ng tÄƒng ca cÃ¡ nhÃ¢n"];
 
@@ -6066,8 +6072,8 @@ namespace HRM.Api.Services
                 var filenamegui = sFile;
                 string sFileNameCopy = PathUploads + filenamegui;
                 File.Copy(sFileName, sFileNameCopy, true);
-                Stream s = File.OpenRead(sFileName);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(sFileName);
+                using ExcelPackage package = new ExcelPackage(s);
                 ExcelWorksheet sheet1 = package.Workbook.Worksheets["Tá»•ng há»£p tÄƒng ca"];
                 ExcelWorksheet sheet2 = package.Workbook.Worksheets["CÃ´ng tÄƒng ca cÃ¡ nhÃ¢n"];
                 package.Workbook.Worksheets.Delete(sheet2);
@@ -6333,7 +6339,7 @@ namespace HRM.Api.Services
                 int nCurrentPage = TimKiem.CurrentPage ?? 0;
                 int nTabTrangThai = TimKiem.TabTrangThai ?? 0;
                 int PageSize = TimKiem.PageSize ?? 25;
-                IEnumerable<HRM_QuyTrinhTinhLuong> result;
+                IQueryable<HRM_QuyTrinhTinhLuong> result;
                 if (TimKiem.TabTrangThai != 3)
 
                     result = from a in db.HRM_QuyTrinhTinhLuong
@@ -10502,8 +10508,8 @@ namespace HRM.Api.Services
             //DateTime dTuNgay = dungchung.UnixTimeStampToDateTime(TuNgay);
             //DateTime dDenNgay = dungchung.UnixTimeStampToDateTime(DenNgay);
             string pathTemplate = PathUploads + FileName;
-            Stream s = File.OpenRead(pathTemplate);
-            ExcelPackage package = new ExcelPackage(s);
+            using Stream s = File.OpenRead(pathTemplate);
+            using ExcelPackage package = new ExcelPackage(s);
             var sheet1 = package.Workbook.Worksheets.First();
 
 
@@ -10846,8 +10852,8 @@ namespace HRM.Api.Services
                 var filenamegui = "BangChamCongNhanVien.xlsx";
                 string sFileNameCopy = PathUploads + filenamegui;
                 File.Copy(sFileName, sFileNameCopy, true);
-                Stream s = File.OpenRead(sFileName);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(sFileName);
+                using ExcelPackage package = new ExcelPackage(s);
 
                 s.Close();
                 byte[] bytee = package.GetAsByteArray();
@@ -10878,8 +10884,8 @@ namespace HRM.Api.Services
                 var filenamegui = "BangLuongThang.xlsx";
                 string sFileNameCopy = PathUploads + filenamegui;
                 File.Copy(sFileName, sFileNameCopy, true);
-                Stream s = File.OpenRead(sFileName);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(sFileName);
+                using ExcelPackage package = new ExcelPackage(s);
                 ExcelWorksheet sheet1 = package.Workbook.Worksheets.First();
                 sheet1.Cells[1, 3, 1, nTCol].Merge = true;
                 if (!string.IsNullOrEmpty(QuyTrinh.TenBangLuong))
@@ -11629,8 +11635,8 @@ namespace HRM.Api.Services
                 var filenamegui = "BangLuongThang.xlsx";
                 string sFileNameCopy = PathUploads + filenamegui;
                 File.Copy(sFileName, sFileNameCopy, true);
-                Stream s = File.OpenRead(sFileName);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(sFileName);
+                using ExcelPackage package = new ExcelPackage(s);
                 ExcelWorksheet sheet1 = package.Workbook.Worksheets.First();
                 sheet1.Cells[1, 3, 1, nTCol].Merge = true;
                 if (!string.IsNullOrEmpty(QuyTrinh.TenBangLuong))
@@ -12333,8 +12339,8 @@ namespace HRM.Api.Services
                     var filenamegui = "BangLuongTongHopVPBank.xlsx";
                     string sFileNameCopy = PathUploads + filenamegui;
                     File.Copy(sFileName, sFileNameCopy, true);
-                    Stream s = File.OpenRead(sFileName);
-                    ExcelPackage package = new ExcelPackage(s);
+                    using Stream s = File.OpenRead(sFileName);
+                    using ExcelPackage package = new ExcelPackage(s);
                     ExcelWorksheet sheet1 = package.Workbook.Worksheets.First();
                     int nRow = 2;
                     int nCol = 1;
@@ -12387,8 +12393,8 @@ namespace HRM.Api.Services
                     var filenamegui = "BangLuongTongHopVietTinBank.xlsx";
                     string sFileNameCopy = PathUploads + filenamegui;
                     File.Copy(sFileName, sFileNameCopy, true);
-                    Stream s = File.OpenRead(sFileName);
-                    ExcelPackage package = new ExcelPackage(s);
+                    using Stream s = File.OpenRead(sFileName);
+                    using ExcelPackage package = new ExcelPackage(s);
                     ExcelWorksheet sheet1 = package.Workbook.Worksheets.First();
                     sheet1.Cells[3, 1].Value = "NgÃ y chi lÆ°Æ¡ng: " + dt.ToString("dd/MM/yyyy");
                     int nRow = 5;
@@ -12438,8 +12444,8 @@ namespace HRM.Api.Services
                     var filenamegui = "BangLuongTongHopVietcombank.xlsx";
                     string sFileNameCopy = PathUploads + filenamegui;
                     File.Copy(sFileName, sFileNameCopy, true);
-                    Stream s = File.OpenRead(sFileName);
-                    ExcelPackage package = new ExcelPackage(s);
+                    using Stream s = File.OpenRead(sFileName);
+                    using ExcelPackage package = new ExcelPackage(s);
                     ExcelWorksheet sheet1 = package.Workbook.Worksheets.First();
                     sheet1.Cells[3, 1].Value = "NgÃ y chi lÆ°Æ¡ng: " + dt.ToString("dd/MM/yyyy");
                     int nRow = 5;
@@ -12516,8 +12522,8 @@ namespace HRM.Api.Services
                 var filenamegui = "Luong.xlsx";
                 string sFileNameCopy = PathUploads + filenamegui;
                 File.Copy(sFileName, sFileNameCopy, true);
-                Stream s = File.OpenRead(sFileName);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(sFileName);
+                using ExcelPackage package = new ExcelPackage(s);
                 ExcelWorksheet sheet1 = package.Workbook.Worksheets["Chi tiáº¿t"];
                 ExcelWorksheet sheet2 = package.Workbook.Worksheets["Quy trÃ¬nh"];
                 // sheet quy trÃ¬nh
@@ -13020,8 +13026,8 @@ namespace HRM.Api.Services
                 var filenamegui = "TongHopTheoDoiBangLuongCoSo.xlsx";
                 string sFileNameCopy = PathUploads + filenamegui;
                 File.Copy(sFileName, sFileNameCopy, true);
-                Stream s = File.OpenRead(sFileName);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(sFileName);
+                using ExcelPackage package = new ExcelPackage(s);
                 ExcelWorksheet sheet1 = package.Workbook.Worksheets.First();
                 List<HRM_TongHopLuong> listData = GetTongHopLuongCoSo(db, Thang, Nam, KeyWord);
                 var listcongty = _CallWebService.GetDanhSachCongTy(db);
@@ -13617,7 +13623,7 @@ namespace HRM.Api.Services
                 int nCurrentPage = TimKiem.CurrentPage ?? 0;
                 int nTabTrangThai = TimKiem.TabTrangThai ?? 0;
                 int PageSize = TimKiem.PageSize ?? 25;
-                IEnumerable<HRM_CapPhatThuHoiTaiSan> listQuytrinh = from a in db.HRM_CapPhatThuHoiTaiSan
+                IQueryable<HRM_CapPhatThuHoiTaiSan> listQuytrinh = from a in db.HRM_CapPhatThuHoiTaiSan
                                                                     orderby a.Created descending
                                                                     select a;
 
@@ -14066,8 +14072,8 @@ namespace HRM.Api.Services
                 var filenamegui = "TongHopTheoDoiCapPhatTaiSan.xlsx";
                 string sFileNameCopy = PathUploads + filenamegui;
                 File.Copy(sFileName, sFileNameCopy, true);
-                Stream s = File.OpenRead(sFileName);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(sFileName);
+                using ExcelPackage package = new ExcelPackage(s);
                 ExcelWorksheet sheet1 = package.Workbook.Worksheets.First();
                 int Loai = 1;
                 if (TimKiem.Loai == 2)
@@ -14095,7 +14101,7 @@ namespace HRM.Api.Services
                 }
                 dungchung.DrawTableExcel(sheet1, 4, 5, 1, CountCol);
                 #region data
-                IEnumerable<HRM_CapPhatThuHoiTaiSan> listQuytrinh = from a in db.HRM_CapPhatThuHoiTaiSan
+                IQueryable<HRM_CapPhatThuHoiTaiSan> listQuytrinh = from a in db.HRM_CapPhatThuHoiTaiSan
                                                                     orderby a.Created descending
                                                                     select a;
                 if (TimKiem.IdCongTy > 0)
@@ -14212,8 +14218,8 @@ namespace HRM.Api.Services
                 var filenamegui = "TongHopTheoDoiCapPhatTaiSan.xlsx";
                 string sFileNameCopy = PathUploads + filenamegui;
                 File.Copy(sFileName, sFileNameCopy, true);
-                Stream s = File.OpenRead(sFileName);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(sFileName);
+                using ExcelPackage package = new ExcelPackage(s);
                 ExcelWorksheet sheet1 = package.Workbook.Worksheets.First();
                 List<HRM_BaoCaoCapPhatDongPhuc> listresult = GetTongHopTheoDoiCapPhatTaiSan(db, timkiem);
                 int nRow = 5;
@@ -14374,7 +14380,7 @@ namespace HRM.Api.Services
                 int nCurrentPage = TimKiem.CurrentPage ?? 0;
                 int nTabTrangThai = TimKiem.TabTrangThai ?? 0;
                 int PageSize = TimKiem.PageSize ?? 25;
-                IEnumerable<HRM_DienGiaiChamCong> result;
+                IQueryable<HRM_DienGiaiChamCong> result;
 
                 if (TimKiem.TabTrangThai != 3)
 
@@ -14414,20 +14420,16 @@ namespace HRM.Api.Services
                 List<string> listId = new List<string>();
                 if (TimKiem.IdDuAn > 0)
                 {
-                    var listBp = db.HRM_QuyTrinhBoPhan_BoPhan.Where(a => a.TableName == nameof(HRM_NhanVien) && a.IdBoPhan == TimKiem.IdDuAn).ToList();
+                    var listBp = db.HRM_QuyTrinhBoPhan_BoPhan.AsNoTracking().Where(a => a.TableName == nameof(HRM_NhanVien) && a.IdBoPhan == TimKiem.IdDuAn).ToList();
                     if (listBp != null && listBp.Count > 0)
                         listId = listBp.Select(a => a.IdQuyTrinh).Distinct().ToList();
-                    result = result.Where(a => listId.Contains(a.IdNhanVien)).ToList();
+                    result = result.Where(a => listId.Contains(a.IdNhanVien));
                 }
                 if (nCurrentPage == 0)
                 {
-                    return result.ToList();
+                    return result.AsNoTracking().ToList();
                 }
-                var itemList = result.Distinct().ToList();
-                int nSum = itemList.Count;
-                int nTotalPage = PageSize > 0 ? (int)Math.Ceiling((double)nSum / PageSize) : (nSum > 0 ? 1 : 0);
-                PagingInfor paging = new PagingInfor(nCurrentPage, nSum, nTotalPage);
-                itemList = itemList.Skip(PageSize * (nCurrentPage - 1)).Take(PageSize).ToList();
+                var itemList = Paginate(result.AsNoTracking().Distinct(), nCurrentPage, PageSize, out PagingInfor paging);
                 var webService = _CallWebService;
                 var listIdNv = itemList.Select(a => a.IdNhanVien).Distinct().ToList();
                 List<HRM_NhanVien> listNhanVien = db.HRM_NhanVien.Where(a => listIdNv.Contains(a.IdGuid)).ToList();
@@ -14695,8 +14697,8 @@ namespace HRM.Api.Services
                 var filenamegui = "DienGiaiChamCong.xlsx";
                 string sFileNameCopy = PathUploads + filenamegui;
                 File.Copy(sFileName, sFileNameCopy, true);
-                Stream s = File.OpenRead(sFileName);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(sFileName);
+                using ExcelPackage package = new ExcelPackage(s);
                 ExcelWorksheet sheet1 = package.Workbook.Worksheets.First();
                 var listIdUser = new List<string>();
                 Itemtimkiem.CurrentPage = 0;

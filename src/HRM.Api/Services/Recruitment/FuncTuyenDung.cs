@@ -74,6 +74,7 @@ namespace HRM.Api.Services.TuyenDung
         public dynamic GetThongTinUngVienById(string Id, ApplicationDbContext db)
         {
             HRM_TuyenDung_UngVien model = db.HRM_TuyenDung_UngVien.Find(Id);
+            if (model == null) return null;
             model.IdTongHopDeNghiTuyenDung = model.IdQuyTrinhNhuCau ?? model.IdNhuCauChiTiet;
             if (model.NgaySinh != null)
                 model.NgaySinhUnix = dungchung.DateTimeToUnixTimeStamp(model.NgaySinh);
@@ -113,10 +114,10 @@ namespace HRM.Api.Services.TuyenDung
             var listBangCap = db.HRM_UngVienBangCap.AsNoTracking().Where(x => x.IdUngVien == model.IdGuid).ToList();
             if (listBangCap.IsNotEmpty())
             {
+                var filesBangCap = FileUploadController.GetListFileDinhKemByIds(db, listBangCap.Select(x => x.IdGuid), nameof(HRM_UngVienBangCap));
                 foreach (var item in listBangCap)
                 {
-
-                    item.lstFileDinhKem = FileUploadController.GetListFileDinhKem(db, item.IdGuid, nameof(HRM_UngVienBangCap));
+                    item.lstFileDinhKem = filesBangCap[item.IdGuid].ToList();
                 }
             }
 
@@ -124,10 +125,10 @@ namespace HRM.Api.Services.TuyenDung
             var listNgonNgu = db.HRM_NgonNguUngVien.AsNoTracking().Where(x => x.IdUngVien == model.IdGuid).ToList();
             if (listNgonNgu.IsNotEmpty())
             {
+                var filesNgonNgu = FileUploadController.GetListFileDinhKemByIds(db, listNgonNgu.Select(x => x.IdGuid), nameof(HRM_NgonNguUngVien));
                 foreach (var item in listNgonNgu)
                 {
-
-                    item.lstFileDinhKem = FileUploadController.GetListFileDinhKem(db, item.IdGuid, nameof(HRM_NgonNguUngVien));
+                    item.lstFileDinhKem = filesNgonNgu[item.IdGuid].ToList();
                 }
             }
 
@@ -135,13 +136,14 @@ namespace HRM.Api.Services.TuyenDung
             var listChungChi = db.HRM_ChungChiUngVien.AsNoTracking().Where(x => x.IdUngVien == model.IdGuid).ToList();
             if (listChungChi.IsNotEmpty())
             {
+                var filesChungChi = FileUploadController.GetListFileDinhKemByIds(db, listChungChi.Select(x => x.IdGuid), nameof(HRM_ChungChiUngVien));
                 foreach (var item in listChungChi)
                 {
                     if (item.NgayCap != null)
                         item.NgayCapUnix = dungchung.DateTimeToUnixTimeStamp(item.NgayCap);
                     if (item.NgayHetHan != null)
                         item.NgayHetHanUnix = dungchung.DateTimeToUnixTimeStamp(item.NgayHetHan);
-                    item.lstFileDinhKem = FileUploadController.GetListFileDinhKem(db, item.IdGuid, nameof(HRM_ChungChiUngVien));
+                    item.lstFileDinhKem = filesChungChi[item.IdGuid].ToList();
                 }
             }
 
@@ -2971,7 +2973,7 @@ namespace HRM.Api.Services.TuyenDung
                 IdCongTyKiemNhiem.AddRange(listBoPhan.Select(a => a.BoPhanChaPkid).Distinct().ToList());
 
             }
-            IEnumerable<HRM_TuyenDung_UngVien> result;
+            IQueryable<HRM_TuyenDung_UngVien> result;
 
             result = from a in db.HRM_TuyenDung_UngVien
                      where ((TimKiem.TrangThai == 4 && (a.TrangThai == 4)) || a.TrangThai == TimKiem.TrangThai)
@@ -3005,11 +3007,7 @@ namespace HRM.Api.Services.TuyenDung
             if (TimKiem.IddmChucDanh > 0)
                 result = result.Where(a => a.IddmChucDanhUngTuyen == TimKiem.IddmChucDanh);
 
-            var itemList = result.ToList();
-            int nSum = itemList.Count;
-            int nTotalPage = nSum / nCurrentPage;
-            PagingInfor paging = new PagingInfor(nCurrentPage, nSum, nTotalPage);
-            itemList = itemList.Skip(PageSize * (nCurrentPage - 1)).Take(PageSize).ToList();
+            var itemList = Paginate(result.AsNoTracking(), nCurrentPage, PageSize, out PagingInfor paging);
 
             List<string> listIdTopHopDenNghi = itemList.Select(r => r.IdTongHopDeNghiTuyenDung).ToList();
             List<HRM_TuyenDung_DeNghi_TongHop> listTopHopDenNghi = db.HRM_TuyenDung_DeNghi_TongHop.Where(r => listIdTopHopDenNghi.Contains(r.IdGuid)).ToList();
@@ -3264,7 +3262,7 @@ namespace HRM.Api.Services.TuyenDung
             }
               
             int nSum = itemList.Count;
-            int nTotalPage = nSum / nCurrentPage;
+            int nTotalPage = CalculateTotalPages(nSum, PageSize);
             PagingInfor paging = new PagingInfor(nCurrentPage, nSum, nTotalPage);
             itemList = itemList.Skip(PageSize * (nCurrentPage - 1)).Take(PageSize).ToList();
             var listChucDanh = _CallWebService.GetDanhSachChucDanh(db);
@@ -3369,9 +3367,12 @@ namespace HRM.Api.Services.TuyenDung
                             }
                         }
                         HRM_TuyenDung_UngVien ungVien = db.HRM_TuyenDung_UngVien.Find(lichPv.IdUngVien);
-                        ungVien.IdLichPhongVan = lichPv.IdGuid;
-                        ungVien.TrangThai = 3;
-                        db.Entry(ungVien).State = EntityState.Modified;
+                        if (ungVien != null)
+                        {
+                            ungVien.IdLichPhongVan = lichPv.IdGuid;
+                            ungVien.TrangThai = 3;
+                            db.Entry(ungVien).State = EntityState.Modified;
+                        }
 
                         db.SaveChanges();
                     }
@@ -4535,6 +4536,8 @@ namespace HRM.Api.Services.TuyenDung
             try
             {
                 HRM_TuyenDung_NguoiPhongVan itemNguoiPhongVan = db.HRM_TuyenDung_NguoiPhongVan.Find(Id);
+                if (itemNguoiPhongVan == null)
+                    return new MessageReturn(DefineData.eErrorMessage.LoiLayDuLieu, "Không tìm thấy dữ liệu");
                 itemNguoiPhongVan.isThamGia = TrangThai;
 
                 HRM_TuyenDung_VongPhongVan VongPhongVan = db.HRM_TuyenDung_VongPhongVan.Where(r => r.IdGuid == itemNguoiPhongVan.IdVongPhongVan).FirstOrDefault();
@@ -4607,16 +4610,18 @@ namespace HRM.Api.Services.TuyenDung
             if (Loai == 1)
             {
                 long IdNhanVienEOS = _CallWebService.GetNhanSuFromUserPkid(db).Id;
-                string IdNhanVien = db.HRM_NhanVien.Where(r => r.IdNhanVienEOS == IdNhanVienEOS).Select(r => r.IdGuid).FirstOrDefault();
+                string IdNhanVien = db.HRM_NhanVien.AsNoTracking().Where(r => r.IdNhanVienEOS == IdNhanVienEOS).Select(r => r.IdGuid).FirstOrDefault();
                 model = db.HRM_TuyenDung_VongPhongVan.Find(Id);
+                if (model == null) return null;
                 var lstNguoiPhongVan = db.HRM_TuyenDung_NguoiPhongVan.Where(r => r.IdVongPhongVan == model.IdGuid && r.IdNguoiThamGia == IdNhanVien).ToList();
+                var filesByNguoi = GetFileDinhKemByIds(db, "HRM_TuyenDung_VongPhongVan", lstNguoiPhongVan.Select(x => x.IdGuid));
                 foreach (var item in lstNguoiPhongVan)
                 {
-                    item.lstFileDinhKem = GetListFileDinhKem(db, "HRM_TuyenDung_VongPhongVan", item.IdGuid);
+                    item.lstFileDinhKem = filesByNguoi[item.IdGuid].ToList();
                 }
                 model.lstNguoiPhongVan = lstNguoiPhongVan;
                 var phongvan = db.HRM_TuyenDung_QuyTrinhPhongVan.Find(model.IdQuyTrinhPhongVan);
-                var UngVien = db.HRM_TuyenDung_UngVien.Find(phongvan.IdUngVien);
+                var UngVien = phongvan != null ? db.HRM_TuyenDung_UngVien.Find(phongvan.IdUngVien) : null;
                 if (UngVien != null)
                 {
                     model.ViTriUngTuyen = _CallWebService.GetChucDanh_Ten(db, UngVien.IddmChucDanhUngTuyen);
@@ -4628,17 +4633,19 @@ namespace HRM.Api.Services.TuyenDung
             else
             {
                 var nguoithamGia = db.HRM_TuyenDung_NguoiPhongVan.Find(Id);
+                if (nguoithamGia == null) return null;
                 List<HRM_TuyenDung_NguoiPhongVan> lstNguoiPhongVan = new List<HRM_TuyenDung_NguoiPhongVan>();
                 lstNguoiPhongVan.Add(nguoithamGia);
+                var filesByNguoi = GetFileDinhKemByIds(db, "HRM_TuyenDung_VongPhongVan", lstNguoiPhongVan.Select(x => x.IdGuid));
                 foreach (var item in lstNguoiPhongVan)
                 {
-                    item.lstFileDinhKem = GetListFileDinhKem(db, "HRM_TuyenDung_VongPhongVan", item.IdGuid);
+                    item.lstFileDinhKem = filesByNguoi[item.IdGuid].ToList();
                 }
-                model.lstNguoiPhongVan = lstNguoiPhongVan;
                 model = db.HRM_TuyenDung_VongPhongVan.Find(nguoithamGia.IdVongPhongVan);
+                if (model == null) return null;
                 model.lstNguoiPhongVan = lstNguoiPhongVan;
                 var phongvan = db.HRM_TuyenDung_QuyTrinhPhongVan.Find(model.IdQuyTrinhPhongVan);
-                var UngVien = db.HRM_TuyenDung_UngVien.Find(phongvan.IdUngVien);
+                var UngVien = phongvan != null ? db.HRM_TuyenDung_UngVien.Find(phongvan.IdUngVien) : null;
                 if (UngVien != null)
                 {
                     model.ViTriUngTuyen = _CallWebService.GetChucDanh_Ten(db, UngVien.IddmChucDanhUngTuyen);
@@ -4891,7 +4898,7 @@ namespace HRM.Api.Services.TuyenDung
                 int nCurrentPage = itemTimKiem.CurrentPage ?? 0;
                 int nTabTrangThai = itemTimKiem.TabTrangThai ?? 0;
                 int PageSize = itemTimKiem.PageSize ?? 25;
-                IEnumerable<HRM_TuyenDung_QuyTrinhPheDuyetLuong> result;
+                IQueryable<HRM_TuyenDung_QuyTrinhPheDuyetLuong> result;
                 if (itemTimKiem.TabTrangThai != 3)
 
                     result = from a in db.HRM_TuyenDung_QuyTrinhPheDuyetLuong
@@ -4917,11 +4924,7 @@ namespace HRM.Api.Services.TuyenDung
                     result = result.Where(a => a.SoQuyTrinh.ToLower().Contains(itemTimKiem.KeyWord.ToLower().Trim())||(!string.IsNullOrEmpty(a.NoiDung) && a.NoiDung.ToLower().Contains(itemTimKiem.KeyWord.ToLower().Trim())));
                 if (itemTimKiem.IdCongTy > 0)
                     result = result.Where(a => a.IdCongTy == itemTimKiem.IdCongTy);
-                var itemList = result.Distinct().ToList();
-                int nSum = itemList.Count;
-                int nTotalPage = nSum / nCurrentPage;
-                PagingInfor paging = new PagingInfor(nCurrentPage, nSum, nTotalPage);
-                itemList = itemList.Skip(PageSize * (nCurrentPage - 1)).Take(PageSize).ToList();
+                var itemList = Paginate(result.AsNoTracking().Distinct(), nCurrentPage, PageSize, out PagingInfor paging);
                 List<BoPhan> BoPhans = _CallWebService.GetDanhSachDuAn(db);
                 foreach (var item in itemList)
                 {
@@ -5514,7 +5517,7 @@ namespace HRM.Api.Services.TuyenDung
                 listId = listCongTy.Select(a => a.Id).Distinct().ToList();
 
             }
-            IEnumerable<HRM_TuyenDung_PheDuyetLuong_UngVien> result = from a in db.HRM_TuyenDung_PheDuyetLuong_UngVien
+            IQueryable<HRM_TuyenDung_PheDuyetLuong_UngVien> result = from a in db.HRM_TuyenDung_PheDuyetLuong_UngVien
                                                                       join b in db.HRM_TuyenDung_QuyTrinhPheDuyetLuong on a.IdQuyTrinhPheDuyet equals b.IdGuid
                                                                       where b.isKetThuc == true && ((itemTimKiem.IdCongTy == null && listId.Contains(b.IdCongTy)) || (itemTimKiem.IdCongTy == 0 && listId.Contains(b.IdCongTy)) || itemTimKiem.IdCongTy == b.IdCongTy)
                                                                       && (itemTimKiem.Nam == null || itemTimKiem.Nam == 0 || itemTimKiem.Nam == b.NgayDeNghi.Year)
@@ -5551,7 +5554,7 @@ namespace HRM.Api.Services.TuyenDung
             {
                 int nSum = listUngVien.Count;
 
-                int nTotalPage = nSum / nCurrentPage;
+                int nTotalPage = CalculateTotalPages(nSum, PageSize);
                 paging = new PagingInfor(nCurrentPage, nSum, nTotalPage);
                 listUngVien = listUngVien.Skip(PageSize * (nCurrentPage - 1)).Take(PageSize).ToList();
             }
@@ -5798,7 +5801,7 @@ namespace HRM.Api.Services.TuyenDung
             var listTrinhDo = db.HRM_dmTrinhDoDaoTao.ToList();
             int Row = 5;
             int nCol = 6;
-            IEnumerable<HRM_TuyenDung_UngVien> result;
+            IQueryable<HRM_TuyenDung_UngVien> result;
 
             result = from a in db.HRM_TuyenDung_UngVien
                      where a.TrangThai == TimKiem.TrangThai

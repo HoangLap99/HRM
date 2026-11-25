@@ -61,7 +61,7 @@ namespace HRM.Api.Services.NhanVien
                 int nCurrentPage = TimKiem.CurrentPage ?? 0;
                 int nTabTrangThai = TimKiem.TabTrangThai ?? 0;
                 int PageSize = TimKiem.PageSize ?? 25;
-                IEnumerable<HRM_KeHoachLamViecTuan> result;
+                IQueryable<HRM_KeHoachLamViecTuan> result;
                 if (TimKiem.TabTrangThai != 3)
 
                     result = from a in db.HRM_KeHoachLamViecTuan
@@ -2521,7 +2521,7 @@ namespace HRM.Api.Services.NhanVien
                 int nCurrentPage = TimKiem.CurrentPage ?? 0;
                 int nTabTrangThai = TimKiem.TabTrangThai ?? 0;
                 int PageSize = TimKiem.PageSize ?? 25;
-                IEnumerable<HRM_XacNhanDiMuonVeSom> result;
+                IQueryable<HRM_XacNhanDiMuonVeSom> result;
                 if (TimKiem.TabTrangThai != 3)
 
                     result = from a in db.HRM_XacNhanDiMuonVeSom
@@ -3270,7 +3270,7 @@ namespace HRM.Api.Services.NhanVien
                 int nCurrentPage = TimKiem.CurrentPage ?? 0;
                 int nTabTrangThai = TimKiem.TabTrangThai ?? 0;
                 int PageSize = TimKiem.PageSize ?? 25;
-                IEnumerable<HRM_DanhGiaNhanVien> result;
+                IQueryable<HRM_DanhGiaNhanVien> result;
                 if (TimKiem.TabTrangThai != 3)
 
                     result = from a in db.HRM_DanhGiaNhanVien
@@ -5321,7 +5321,7 @@ namespace HRM.Api.Services.NhanVien
                 int nCurrentPage = TimKiem.CurrentPage ?? 0;
                 int nTabTrangThai = TimKiem.TabTrangThai ?? 0;
                 int PageSize = TimKiem.PageSize ?? 25;
-                IEnumerable<HRM_QuyTrinhDanhGia> result;
+                IQueryable<HRM_QuyTrinhDanhGia> result;
                 if (TimKiem.TabTrangThai != 3)
                     result = from a in db.HRM_QuyTrinhDanhGia
                              join b in db.HRM_QuyTrinhXuLy on a.IdGuid equals b.IdTable
@@ -5504,6 +5504,8 @@ namespace HRM.Api.Services.NhanVien
             try
             {
                 HRM_QuyTrinhDanhGia model = db.HRM_QuyTrinhDanhGia.Find(Id);
+                if (model == null)
+                    return new ErrorMessage(ErrorMessage.eState.KhongThanhCong) { message = "Không tìm thấy dữ liệu" };
                 model.NgayDanhGiaUnix = dungchung.DateTimeToUnixTimeStamp(model.NgayDanhGia);
 
                 model.listFileDinhKem = GetListFileDinhKem(db, DefineData.eTable.HRM_QuyTrinhDanhGia.ToString(), Id);
@@ -6005,7 +6007,7 @@ namespace HRM.Api.Services.NhanVien
                 int nCurrentPage = TimKiem.CurrentPage ?? 0;
                 int nTabTrangThai = TimKiem.TabTrangThai ?? 0;
                 int PageSize = TimKiem.PageSize ?? 25;
-                IEnumerable<HRM_QuyTrinhXacNhanNgoaiGio> result;
+                IQueryable<HRM_QuyTrinhXacNhanNgoaiGio> result;
                 if (TimKiem.TabTrangThai != 3)
                     result = from a in db.HRM_QuyTrinhXacNhanNgoaiGio
                              join b in db.HRM_QuyTrinhXuLy on a.IdGuid equals b.IdTable
@@ -7118,7 +7120,7 @@ namespace HRM.Api.Services.NhanVien
                 int nCurrentPage = TimKiem.CurrentPage ?? 1;
                 int nTabTrangThai = TimKiem.TabTrangThai ?? 0;
                 int PageSize = TimKiem.PageSize ?? 25;
-                IEnumerable<HRM_BaoCaoCongViec_NhanVien> result = from a in db.HRM_BaoCaoCongViec_NhanVien
+                IQueryable<HRM_BaoCaoCongViec_NhanVien> result = from a in db.HRM_BaoCaoCongViec_NhanVien
                                                                   orderby a.Nam descending, a.Thang descending
                                                                   select a
                                                                   ;
@@ -7212,7 +7214,7 @@ namespace HRM.Api.Services.NhanVien
             ExcelPackage package = new ExcelPackage(s);
             dyn.CurrentPage = 0;
             ExcelWorksheet sheet1 = package.Workbook.Worksheets["Mẫu"];
-            IEnumerable<HRM_BaoCaoCongViec_NhanVien> result = from a in db.HRM_BaoCaoCongViec_NhanVien
+            IQueryable<HRM_BaoCaoCongViec_NhanVien> result = from a in db.HRM_BaoCaoCongViec_NhanVien
 
                                                               select a;
             sheet1.Cells[1, 3].Value = "BÁO CÁO CÔNG VIỆC THÁNG " + TimKiem.Thang + "/" + TimKiem.Nam;

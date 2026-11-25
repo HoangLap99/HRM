@@ -201,7 +201,7 @@ namespace HRM.Api.Services.HopDong
             int PageSize = timKiem.PageSize ?? 20;
             int TabTrangThai = timKiem.TabTrangThai ?? 1;
 
-            IEnumerable<HRM_HopDong> result;
+            IQueryable<HRM_HopDong> result;
             if (timKiem.TabTrangThai != 3)
 
                 result = (from a in db.HRM_HopDong
@@ -276,7 +276,7 @@ namespace HRM.Api.Services.HopDong
             }
 
             var _listIdNhanVien = _listBoPhan.Select(x => x.IdQuyTrinh).Distinct().ToList();
-            result = result.Where(x => _listIdNhanVien.Contains(x.IdGuid)).ToList();
+            result = result.Where(x => _listIdNhanVien.Contains(x.IdGuid));
             if (timKiem.IdBoPhanEOS > 0)
                 result = result.Where(a => a.IdBoPhanEOS == timKiem.IdBoPhanEOS);
             if (timKiem.LoaiLuong > 0)
@@ -288,11 +288,7 @@ namespace HRM.Api.Services.HopDong
 
 
 
-            var listItem = result.ToList();
-            int nSum = listItem.Count;
-            int nTotalPage = nSum / CurrentPage;
-            PagingInfor paging = new PagingInfor(CurrentPage, nSum, nTotalPage);
-            listItem = listItem.Skip(PageSize * (CurrentPage - 1)).Take(PageSize).ToList();
+            var listItem = Paginate(result.AsNoTracking(), CurrentPage, PageSize, out PagingInfor paging);
             var listIdNhanVien = listItem.Select(q => q.IdNhanVien).ToList();
             var NhanViens = db.HRM_NhanVien.Where(r => listIdNhanVien.Contains(r.IdGuid)).ToList();
 
@@ -1450,16 +1446,19 @@ namespace HRM.Api.Services.HopDong
         public dynamic ChuyenTiepHopDong(ApplicationDbContext db)
         {
             var listHopDong = db.HRM_HopDong.Where(a => a.isKetThuc == true).ToList();
-            var listNhanVien = db.HRM_NhanVien.ToList();
-            //var phucap = db.HRM_HopDongPhuCap.ToList();
-            //var Luong = db.HRM_Luong_HopDong.ToList();
-            //var baoHiem = db.HRM_BaoHiem_HopDong.ToList();
+            var idsNv = listHopDong.Select(a => a.IdNhanVien).Where(x => !string.IsNullOrEmpty(x)).Distinct().ToList();
+            var nhanVienById = db.HRM_NhanVien.AsNoTracking()
+                .Where(a => idsNv.Contains(a.IdGuid))
+                .ToDictionary(a => a.IdGuid);
             foreach (var item in listHopDong)
             {
-                item.IdNhanVienEOS = listNhanVien.FirstOrDefault(a => a.IdGuid == item.IdNhanVien).IdNhanVienEOS;
-                item.IdCongTyEOS = listNhanVien.FirstOrDefault(a => a.IdGuid == item.IdNhanVien).IdCongTyEOS;
-                item.IdBoPhanEOS = listNhanVien.FirstOrDefault(a => a.IdGuid == item.IdNhanVien).IdBoPhanEOS;
-                item.IddmChucVu = listNhanVien.FirstOrDefault(a => a.IdGuid == item.IdNhanVien).IdChucVu;
+                if (!string.IsNullOrEmpty(item.IdNhanVien) && nhanVienById.TryGetValue(item.IdNhanVien, out var nv))
+                {
+                    item.IdNhanVienEOS = nv.IdNhanVienEOS;
+                    item.IdCongTyEOS = nv.IdCongTyEOS;
+                    item.IdBoPhanEOS = nv.IdBoPhanEOS;
+                    item.IddmChucVu = nv.IdChucVu;
+                }
                 clsLink_NhanVien_BoPhan_ChucVu chucvuEOS = _CallWebService.AddChucVuNhanSu(db, item);
             }
             db.SaveChanges();
@@ -1835,6 +1834,7 @@ namespace HRM.Api.Services.HopDong
             {
                 string TrangThai = DefineData.eTrangTHaiHopDong.HetHieuLuc.ToString();
                 HRM_HopDong hopDong = db.HRM_HopDong.Find(IdHopDong);
+                if (hopDong == null) return new MessageReturn(DefineData.eErrorMessage.LoiLayDuLieu, "Không tìm thấy hợp đồng");
                 hopDong.TrangThai = TrangThai;
                 db.SaveChanges();
                 return new MessageReturn(DefineData.eErrorMessage.CapNhatThanhCong, "Cập nhật thành công");
@@ -1884,8 +1884,9 @@ namespace HRM.Api.Services.HopDong
 
             if (listMoTaCongViec != null && listMoTaCongViec.Count() > 0)
             {
+                var filesMoTa = FileUploadController.GetListFileDinhKemByIds(dbContext, listMoTaCongViec.Select(x => x.IdGuid), nameof(HRM_HopDongCongViec));
                 foreach (var item in listMoTaCongViec)
-                    item.listFileDinhKem = FileUploadController.GetListFileDinhKem(dbContext, item.IdGuid, nameof(HRM_HopDongCongViec));
+                    item.listFileDinhKem = filesMoTa[item.IdGuid].ToList();
 
                 model.listMoTaCongViec = listMoTaCongViec.Where(a => string.IsNullOrEmpty(a.IdParent)).Select(a => new ReturnData<HRM_HopDongCongViec>
                 {
@@ -2933,8 +2934,8 @@ namespace HRM.Api.Services.HopDong
                 var filenamegui = "ImportHopDongNhanVien_" + DateTime.Now.ToOADate() + ".xlsx";
                 string sFileNameCopy = PathUploads + filenamegui;
                 File.Copy(sFileName, sFileNameCopy, true);
-                Stream s = File.OpenRead(sFileName);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(sFileName);
+                using ExcelPackage package = new ExcelPackage(s);
                 CallWebService callWeb = _CallWebService;
                 ExcelWorksheet sheet1 = package.Workbook.Worksheets["Danh Mục"]; ;
                 var dmTinhTrangHonNhan = db.HRM_dmTinhTrangHonNhan.ToList();
@@ -3080,8 +3081,8 @@ namespace HRM.Api.Services.HopDong
                 var filenamegui = "DanhSachNhanVienHetHanHopDong.xlsx";
                 string sFileNameCopy = PathUploads + filenamegui;
                 File.Copy(sFileName, sFileNameCopy, true);
-                Stream s = File.OpenRead(sFileName);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(sFileName);
+                using ExcelPackage package = new ExcelPackage(s);
                 ExcelWorksheet sheet1 = package.Workbook.Worksheets.First();
                 CallWebService callWeb = _CallWebService;
                 var VoThoiHan = db.HRM_dmThoiHanHopDong.FirstOrDefault(a => a.Ma == "KTH");
@@ -3300,8 +3301,8 @@ namespace HRM.Api.Services.HopDong
                 string pathTemplate = PathUploads + aFileName;
                 if (File.Exists(pathTemplate) == false)
                     return new MessageReturn(DefineData.eErrorMessage.LoiCapNhat, "Không tìm thấy file xlsx");
-                Stream s = File.OpenRead(pathTemplate);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(pathTemplate);
+                using ExcelPackage package = new ExcelPackage(s);
                 s.Close();
                 #region Thông tin chung
                 var sheet1 = package.Workbook.Worksheets["Thông tin chung"];
@@ -3994,8 +3995,8 @@ namespace HRM.Api.Services.HopDong
                 string pathTemplate = PathUploads + aFileName;
                 if (File.Exists(pathTemplate) == false)
                     return new MessageReturn(DefineData.eErrorMessage.LoiCapNhat, "Không tìm thấy file xlsx");
-                Stream s = File.OpenRead(pathTemplate);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(pathTemplate);
+                using ExcelPackage package = new ExcelPackage(s);
                 s.Close();
                 var listHinhThucTraLuong = dbContext.HRM_dmHinhThucTraLuong.ToList();
 
@@ -4063,13 +4064,13 @@ namespace HRM.Api.Services.HopDong
             var filenamegui = "ImportHopDongNhanVien_" + DateTime.Now.ToOADate() + ".xlsx";
             string sFileNameCopy = PathUploads + filenamegui;
             File.Copy(sFileName, sFileNameCopy, true);
-            Stream s = File.OpenRead(sFileName);
-            ExcelPackage package = new ExcelPackage(s);
+            using Stream s = File.OpenRead(sFileName);
+            using ExcelPackage package = new ExcelPackage(s);
             CallWebService callWeb = _CallWebService;
             #region data
 
             //IEnumerable<HRM_HopDong> result = null;
-            IEnumerable<HRM_HopDong> result;
+            IQueryable<HRM_HopDong> result;
             if (timKiem.TabTrangThai != 3)
 
                 result = (from a in db.HRM_HopDong
@@ -4158,7 +4159,7 @@ namespace HRM.Api.Services.HopDong
             }
 
             var _listIdNhanVien = _listBoPhan.Select(x => x.IdQuyTrinh).Distinct().ToList();
-            result = result.Where(x => _listIdNhanVien.Contains(x.IdGuid)).ToList();
+            result = result.Where(x => _listIdNhanVien.Contains(x.IdGuid));
             if (timKiem.IdBoPhanEOS > 0)
                 result = result.Where(a => a.IdBoPhanEOS == timKiem.IdBoPhanEOS);
             if (timKiem.LoaiLuong > 0)
@@ -4824,8 +4825,8 @@ namespace HRM.Api.Services.HopDong
                 string pathTemplate = PathUploads + aFileName;
                 if (File.Exists(pathTemplate) == false)
                     return new MessageReturn(DefineData.eErrorMessage.LoiCapNhat, "Không tìm thấy file xlsx");
-                Stream s = File.OpenRead(pathTemplate);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(pathTemplate);
+                using ExcelPackage package = new ExcelPackage(s);
                 s.Close();
                 #region Thông tin chung
                 var sheet1 = package.Workbook.Worksheets["Thông tin chung"];
@@ -5471,8 +5472,8 @@ namespace HRM.Api.Services.HopDong
             string pathTemplate = PathUploads + aFileName;
             if (File.Exists(pathTemplate) == false)
                 return new MessageReturn(DefineData.eErrorMessage.LoiCapNhat, "Không tìm thấy file xlsx");
-            Stream s = File.OpenRead(pathTemplate);
-            ExcelPackage package = new ExcelPackage(s);
+            using Stream s = File.OpenRead(pathTemplate);
+            using ExcelPackage package = new ExcelPackage(s);
             s.Close();
             var sheet1 = package.Workbook.Worksheets.First();
             int row = 7;
@@ -5715,8 +5716,8 @@ namespace HRM.Api.Services.HopDong
             string pathTemplate = PathUploads + aFileName;
             if (File.Exists(pathTemplate) == false)
                 return new MessageReturn(DefineData.eErrorMessage.LoiCapNhat, "Không tìm thấy file xlsx");
-            Stream s = File.OpenRead(pathTemplate);
-            ExcelPackage package = new ExcelPackage(s);
+            using Stream s = File.OpenRead(pathTemplate);
+            using ExcelPackage package = new ExcelPackage(s);
             s.Close();
             var sheet1 = package.Workbook.Worksheets.First();
             int row = 7;
@@ -5909,8 +5910,8 @@ namespace HRM.Api.Services.HopDong
                 var filenamegui = Guid.NewGuid().ToString() + ".xlsx";
                 string sFileNameCopy = PathUploads + filenamegui;
                 File.Copy(sFileName, sFileNameCopy, true);
-                Stream s = File.OpenRead(sFileName);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(sFileName);
+                using ExcelPackage package = new ExcelPackage(s);
                 ExcelWorksheet sheet1 = package.Workbook.Worksheets[2];
                 var listLoaiPhuCap = db.HRM_dmPhuCap.ToList();
                 int nRow = 3;
@@ -5942,8 +5943,8 @@ namespace HRM.Api.Services.HopDong
             {
                 string pathTemplate = PathUploads + aFileName;
 
-                Stream s = File.OpenRead(pathTemplate);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(pathTemplate);
+                using ExcelPackage package = new ExcelPackage(s);
                 s.Close();
 
                 var phuCap = package.Workbook.Worksheets[1];
@@ -6365,12 +6366,14 @@ namespace HRM.Api.Services.HopDong
         }
         public dynamic UpdateChucVuChucDanhHopDong(ApplicationDbContext db)
         {
-            var listNhanVien = db.HRM_NhanVien.ToList();
             var listHopDong = db.HRM_HopDong.Where(a => a.isKetThuc == true).Distinct().ToList();
+            var idsNv = listHopDong.Select(a => a.IdNhanVien).Where(x => !string.IsNullOrEmpty(x)).Distinct().ToList();
+            var nhanVienById = db.HRM_NhanVien.AsNoTracking()
+                .Where(a => idsNv.Contains(a.IdGuid))
+                .ToDictionary(a => a.IdGuid);
             foreach (var item in listHopDong)
             {
-                var nhanVien = listNhanVien.FirstOrDefault(a => a.IdGuid == item.IdNhanVien);
-                if (nhanVien != null)
+                if (!string.IsNullOrEmpty(item.IdNhanVien) && nhanVienById.TryGetValue(item.IdNhanVien, out var nhanVien))
                 {
                     item.IddmChucDanh = nhanVien.IdChucDanh;
                     item.IddmChucVu = nhanVien.IdChucVu;
@@ -6540,8 +6543,8 @@ namespace HRM.Api.Services.HopDong
                 var filenamegui = "Theodoihopdong.xlsx";
                 string sFileNameCopy = PathUploads + filenamegui;
                 File.Copy(sFileName, sFileNameCopy, true);
-                Stream s = File.OpenRead(sFileName);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(sFileName);
+                using ExcelPackage package = new ExcelPackage(s);
                 ExcelWorksheet sheet1 = package.Workbook.Worksheets.First();
                 List<HRM_TheoDoiHopDong_NhanVien> listData = GetTongHopTheoDoiHopDong(db, timkiem);
                 if (listData != null && listData.Count > 0)

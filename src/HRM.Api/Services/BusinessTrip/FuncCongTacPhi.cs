@@ -47,7 +47,7 @@ namespace HRM.Api.Services.CongTacPhi
                 int nCurrentPage = TimKiem.CurrentPage ?? 0;
                 int nTabTrangThai = TimKiem.TabTrangThai ?? 0;
                 int PageSize = TimKiem.PageSize ?? 25;
-                IEnumerable<HRM_KeHoachCongTac> result;
+                IQueryable<HRM_KeHoachCongTac> result;
                 if (TimKiem.TabTrangThai != 3)
                     result = from a in db.HRM_KeHoachCongTac
                              join b in db.HRM_QuyTrinhXuLy on a.IdGuid equals b.IdTable
@@ -67,11 +67,7 @@ namespace HRM.Api.Services.CongTacPhi
                 if (TimKiem.IdBoPhan != null && TimKiem.IdBoPhan > 0)
                     result = result.Where(a => a.IdBoPhan == TimKiem.IdBoPhan);
 
-                var itemList = result.ToList();
-                int nSum = itemList.Count;
-                int nTotalPage = nSum / nCurrentPage;
-                PagingInfor paging = new PagingInfor(nCurrentPage, nSum, nTotalPage);
-                itemList = itemList.Skip(PageSize * (nCurrentPage - 1)).Take(PageSize).ToList();
+                var itemList = Paginate(result.AsNoTracking(), nCurrentPage, PageSize, out PagingInfor paging);
                 List<BoPhan> BoPhans = _CallWebService.GetDanhSachBoPhan(db);
                 var listIdNV = itemList.Select(a => a.IdNguoiTaoPhieu).Distinct().ToList().ToList();
                 var listNhanVien = db.HRM_NhanVien.Where(a => listIdNV.Contains(a.IdGuid)).Distinct().ToList();
@@ -221,6 +217,7 @@ namespace HRM.Api.Services.CongTacPhi
         public dynamic GetByIdQuyTrinhKeHoachCongTac(string Id, ApplicationDbContext db)
         {
             HRM_KeHoachCongTac model = db.HRM_KeHoachCongTac.Find(Id);
+            if (model == null) return null;
             model.NgayVeUnix = dungchung.DateTimeToUnixTimeStamp(model.NgayVe);
             model.NgayDiUnix = dungchung.DateTimeToUnixTimeStamp(model.NgayDi);
             model.listNhanVienCongTac = db.HRM_KeHoachCongTac_NhanSuCongTac.Where(r => r.IdQuyTrinh == Id).OrderBy(a => a.SapXep).ToList();
@@ -480,8 +477,8 @@ namespace HRM.Api.Services.CongTacPhi
             var filenamegui = "MauKeHoachCongTac.xlsx";
             string sFileNameCopy =PathUploads+ filenamegui;
             File.Copy(sFileName, sFileNameCopy, true);
-            Stream s = File.OpenRead(sFileName);
-            ExcelPackage package = new ExcelPackage(s);
+            using Stream s = File.OpenRead(sFileName);
+            using ExcelPackage package = new ExcelPackage(s);
             var sheet1 = package.Workbook.Worksheets.First();
             if (QuyTrinh.NoiDen == null)
                 QuyTrinh.NoiDen = "";
@@ -656,7 +653,7 @@ namespace HRM.Api.Services.CongTacPhi
                 int nCurrentPage = TimKiem.CurrentPage ?? 0;
                 int nTabTrangThai = TimKiem.TabTrangThai ?? 0;
                 int PageSize = TimKiem.PageSize ?? 25;
-                IEnumerable<HRM_KetQuaCongTac> result;
+                IQueryable<HRM_KetQuaCongTac> result;
                 if (TimKiem.TabTrangThai != 3)
                     result = from a in db.HRM_KetQuaCongTac
                              join b in db.HRM_QuyTrinhXuLy on a.IdGuid equals b.IdTable
@@ -675,11 +672,7 @@ namespace HRM.Api.Services.CongTacPhi
                     result = result.Where(a => a.SoPhieu.ToLower().Contains(TimKiem.KeyWord.ToLower().Trim()) || a.NoiDung.ToLower().Contains(TimKiem.KeyWord.ToLower().Trim()));
                 if (TimKiem.IdBoPhan != null && TimKiem.IdBoPhan > 0)
                     result = result.Where(a => a.IdBoPhan == TimKiem.IdBoPhan);
-                var itemList = result.ToList();
-                int nSum = itemList.Count;
-                int nTotalPage = nSum / nCurrentPage;
-                PagingInfor paging = new PagingInfor(nCurrentPage, nSum, nTotalPage);
-                itemList = itemList.Skip(PageSize * (nCurrentPage - 1)).Take(PageSize).ToList();
+                var itemList = Paginate(result.AsNoTracking(), nCurrentPage, PageSize, out PagingInfor paging);
                 List<BoPhan> BoPhans = _CallWebService.GetDanhSachBoPhan(db);
                 var listIdNV = itemList.Select(a => a.IdNguoiTaoPhieu).Distinct().ToList().ToList();
                 var listNhanVien = db.HRM_NhanVien.Where(a => listIdNV.Contains(a.IdGuid)).Distinct().ToList();
@@ -917,6 +910,7 @@ namespace HRM.Api.Services.CongTacPhi
         public dynamic GetByIdQuyTrinhKetQuaCongTac(string Id, ApplicationDbContext db)
         {
             HRM_KetQuaCongTac model = db.HRM_KetQuaCongTac.Find(Id);
+            if (model == null) return null;
             model.NgayVeUnix = dungchung.DateTimeToUnixTimeStamp(model.NgayVe);
             model.NgayDiUnix = dungchung.DateTimeToUnixTimeStamp(model.NgayDi);
             model.listNhanVienCongTac = db.HRM_KetQuaCongTac_NhanSuCongTac.Where(r => r.IdQuyTrinh == Id).OrderBy(a => a.SapXep).ToList();
@@ -1604,8 +1598,8 @@ namespace HRM.Api.Services.CongTacPhi
                 DateTime dt = DateTime.Now;
                 string sFileNameCopy = PathUploads + "BaoCaoChiPhiCongTacDownload_" + dt.ToOADate() + ".xlsx";
                 File.Copy(sFileName, sFileNameCopy, true);
-                Stream s = File.OpenRead(sFileNameCopy);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(sFileNameCopy);
+                using ExcelPackage package = new ExcelPackage(s);
                 ExcelWorksheet sheet1 = package.Workbook.Worksheets.First();
                 sheet1.Cells[5, 3].Value = "Thực chi năm " + Nam + " (đồng)";
                 err = GetBaoCaoChiPhiCongTacNewNew(db, Nam);
@@ -1710,8 +1704,8 @@ namespace HRM.Api.Services.CongTacPhi
             var filenamegui = "KetQuaCongTac.xlsx";
             string sFileNameCopy =PathUploads+ filenamegui;
             File.Copy(sFileName, sFileNameCopy, true);
-            Stream s = File.OpenRead(sFileName);
-            ExcelPackage package = new ExcelPackage(s);
+            using Stream s = File.OpenRead(sFileName);
+            using ExcelPackage package = new ExcelPackage(s);
             var sheet1 = package.Workbook.Worksheets.First();
             if (QuyTrinh.NoiDen == null)
                 QuyTrinh.NoiDen = "";

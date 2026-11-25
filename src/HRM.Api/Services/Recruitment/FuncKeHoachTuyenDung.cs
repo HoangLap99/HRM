@@ -100,7 +100,7 @@ namespace HRM.Api.Services.TuyenDung
                 int nCurrentPage = TimKiem.CurrentPage ?? 0;
                 int nTabTrangThai = TimKiem.TabTrangThai ?? 0;
                 int PageSize = TimKiem.PageSize ?? 25;
-                IEnumerable<HRM_TuyenDung_NhuCau> result;
+                IQueryable<HRM_TuyenDung_NhuCau> result;
                 if (TimKiem.TabTrangThai != 3)
 
                     result = from a in db.HRM_TuyenDung_NhuCau
@@ -130,11 +130,7 @@ namespace HRM.Api.Services.TuyenDung
                 //{
                 //    result = result.Where(a => a.IdCongTyEOS == TimKiem.IdCongTy);
                 //}
-                var itemList = result.Distinct().ToList();
-                int nSum = itemList.Count;
-                int nTotalPage = nSum / nCurrentPage;
-                PagingInfor paging = new PagingInfor(nCurrentPage, nSum, nTotalPage);
-                itemList = itemList.Skip(PageSize * (nCurrentPage - 1)).Take(PageSize).ToList();
+                var itemList = Paginate(result.AsNoTracking().Distinct(), nCurrentPage, PageSize, out PagingInfor paging);
 
                 List<BoPhan> BoPhans = _CallWebService.GetDanhSachCongTy(db);
 
@@ -441,7 +437,7 @@ namespace HRM.Api.Services.TuyenDung
                 int nCurrentPage = TimKiem.CurrentPage ?? 0;
                 int nTabTrangThai = TimKiem.TabTrangThai ?? 0;
                 int PageSize = TimKiem.PageSize ?? 25;
-                IEnumerable<HRM_DeNghiTuyenDung> result;
+                IQueryable<HRM_DeNghiTuyenDung> result;
                 if (TimKiem.TabTrangThai != 3)
 
                     result = from a in db.HRM_DeNghiTuyenDung
@@ -473,11 +469,7 @@ namespace HRM.Api.Services.TuyenDung
                 if (TimKiem.IdBoPhan > 0)
                     result = result.Where(a => a.IdBoPhan == TimKiem.IdBoPhan);
 
-                var itemList = result.Distinct().ToList();
-                int nSum = itemList.Count;
-                int nTotalPage = nSum / nCurrentPage;
-                PagingInfor paging = new PagingInfor(nCurrentPage, nSum, nTotalPage);
-                itemList = itemList.Skip(PageSize * (nCurrentPage - 1)).Take(PageSize).ToList();
+                var itemList = Paginate(result.AsNoTracking().Distinct(), nCurrentPage, PageSize, out PagingInfor paging);
                 List<BoPhan> BoPhans = _CallWebService.GetDanhSachBoPhan(db);
                 List<ChucVu> listChucVu = _CallWebService.GetDanhSachChucVu(db);
                 var listCongTy = _CallWebService.GetDanhSachDuAn(db);
@@ -861,8 +853,8 @@ namespace HRM.Api.Services.TuyenDung
             var filenamegui = "DeNghiTuyenDungNhanVien.xlsx";
             string sFileNameCopy =PathUploads+ filenamegui;
             File.Copy(sFileName, sFileNameCopy, true);
-            Stream s = File.OpenRead(sFileName);
-            ExcelPackage package = new ExcelPackage(s);
+            using Stream s = File.OpenRead(sFileName);
+            using ExcelPackage package = new ExcelPackage(s);
 
             var thongTinDuAn = _CallWebService.GetQuyTrinhDuAn(QuyTrinh.IdCongTy, db);
             var sheet1 = package.Workbook.Worksheets.First();
@@ -1016,8 +1008,8 @@ namespace HRM.Api.Services.TuyenDung
             var filenamegui = "DeNghiTuyenDungNhanVien.xlsx";
             string sFileNameCopy =PathUploads+ filenamegui;
             File.Copy(sFileName, sFileNameCopy, true);
-            Stream s = File.OpenRead(sFileName);
-            ExcelPackage package = new ExcelPackage(s);
+            using Stream s = File.OpenRead(sFileName);
+            using ExcelPackage package = new ExcelPackage(s);
             var sheet1 = package.Workbook.Worksheets.First();
             var NhanVienYeuCau = db.HRM_NhanVien.FirstOrDefault(a => a.IdUser == QuyTrinh.CreatedBy);
             if (NhanVienYeuCau == null)
@@ -1108,8 +1100,8 @@ namespace HRM.Api.Services.TuyenDung
             var filenamegui = "ImportNhuCauTuyenDung.xlsx";
             string sFileNameCopy =PathUploads+ filenamegui;
             File.Copy(sFileName, sFileNameCopy, true);
-            Stream s = File.OpenRead(sFileName);
-            ExcelPackage package = new ExcelPackage(s);
+            using Stream s = File.OpenRead(sFileName);
+            using ExcelPackage package = new ExcelPackage(s);
             var sheet1 = package.Workbook.Worksheets.First();
             var listPhuCap = db.HRM_dmPhuCap.OrderBy(a => a.SapXep).ToList();
             int col = 10;
@@ -1143,8 +1135,8 @@ namespace HRM.Api.Services.TuyenDung
             var filenamegui = "ImportQuyTrinhNhuCauTuyenDung.xlsx";
             string sFileNameCopy =PathUploads+ filenamegui;
             File.Copy(sFileName, sFileNameCopy, true);
-            Stream s = File.OpenRead(sFileName);
-            ExcelPackage package = new ExcelPackage(s);
+            using Stream s = File.OpenRead(sFileName);
+            using ExcelPackage package = new ExcelPackage(s);
 
             var sheetDM = package.Workbook.Worksheets["Danh mục"];
             var listCty = _CallWebService.GetDanhSachDuAn(db);
@@ -1171,7 +1163,7 @@ namespace HRM.Api.Services.TuyenDung
                 sheetDM.Cells[nRow, 4].Value = item.MaBoPhan;
                 nRow++;
             }
-            var listNhanVien = db.HRM_NhanVien.ToList();
+            var listNhanVien = db.HRM_NhanVien.AsNoTracking().Select(x => new { x.MaNhanVien, x.TenDayDu }).ToList();
             nRow = 3;
             foreach (var item in listNhanVien)
             {
@@ -1214,9 +1206,9 @@ namespace HRM.Api.Services.TuyenDung
             var filenamegui = "TongHopDeNghiTuyenDung.xlsx";
             string sFileNameCopy =PathUploads+ filenamegui;
             File.Copy(sFileName, sFileNameCopy, true);
-            Stream s = File.OpenRead(sFileName);
-            ExcelPackage package = new ExcelPackage(s);
-            IEnumerable<HRM_DeNghiTuyenDung> result;
+            using Stream s = File.OpenRead(sFileName);
+            using ExcelPackage package = new ExcelPackage(s);
+            IQueryable<HRM_DeNghiTuyenDung> result;
             TimKiem TimKiem = JsonConvert.DeserializeObject(dyn.ToString(), typeof(TimKiem)) as TimKiem;
 
             result = from a in db.HRM_DeNghiTuyenDung
@@ -1339,8 +1331,8 @@ namespace HRM.Api.Services.TuyenDung
 
                 string sFileName =PathUploads+ sFile;
                 DateTime dt = DateTime.Now;
-                Stream s = File.OpenRead(sFileName);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(sFileName);
+                using ExcelPackage package = new ExcelPackage(s);
                 var sheetQT = package.Workbook.Worksheets["Quy trình"];
                 var sheet1 = package.Workbook.Worksheets["Công nhân"];
                 var sheet2 = package.Workbook.Worksheets["Nhân viên VP"];
@@ -1513,8 +1505,8 @@ namespace HRM.Api.Services.TuyenDung
 
                 string sFileName =PathUploads+ sFile;
                 DateTime dt = DateTime.Now;
-                Stream s = File.OpenRead(sFileName);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(sFileName);
+                using ExcelPackage package = new ExcelPackage(s);
                 var sheet1 = package.Workbook.Worksheets["Công nhân"];
                 var sheet2 = package.Workbook.Worksheets["Nhân viên VP"];
                 var listPhuCap = db.HRM_dmPhuCap.OrderBy(a => a.SapXep).ToList();
@@ -1595,7 +1587,7 @@ namespace HRM.Api.Services.TuyenDung
                 int nCurrentPage = TimKiem.CurrentPage ?? 0;
                 int nTabTrangThai = TimKiem.TabTrangThai ?? 0;
                 int PageSize = TimKiem.PageSize ?? 25;
-                IEnumerable<HRM_TuyenDung_DinhBienCoSo> result;
+                IQueryable<HRM_TuyenDung_DinhBienCoSo> result;
                 if (TimKiem.TabTrangThai != 3)
 
                     result = from a in db.HRM_TuyenDung_DinhBienCoSo
@@ -1629,11 +1621,7 @@ namespace HRM.Api.Services.TuyenDung
                 {
                     result = result.Where(a => a.Nam == TimKiem.Nam);
                 }
-                var itemList = result.Distinct().ToList();
-                int nSum = itemList.Count;
-                int nTotalPage = nSum / nCurrentPage;
-                PagingInfor paging = new PagingInfor(nCurrentPage, nSum, nTotalPage);
-                itemList = itemList.Skip(PageSize * (nCurrentPage - 1)).Take(PageSize).ToList();
+                var itemList = Paginate(result.AsNoTracking().Distinct(), nCurrentPage, PageSize, out PagingInfor paging);
 
                 foreach (HRM_TuyenDung_DinhBienCoSo item in itemList)
                 {
@@ -1655,7 +1643,7 @@ namespace HRM.Api.Services.TuyenDung
 
             try
             {
-                IEnumerable<HRM_TuyenDung_DinhBienCoSo>
+                IQueryable<HRM_TuyenDung_DinhBienCoSo>
                     result = from a in db.HRM_TuyenDung_DinhBienCoSo
                              join b in db.HRM_QuyTrinhXuLy on a.IdGuid equals b.IdTable
 
@@ -2036,8 +2024,8 @@ namespace HRM.Api.Services.TuyenDung
             var filenamegui = "DinhBienCoSo.xlsx";
             string sFileNameCopy =PathUploads+ filenamegui;
             File.Copy(sFileName, sFileNameCopy, true);
-            Stream s = File.OpenRead(sFileName);
-            ExcelPackage package = new ExcelPackage(s);
+            using Stream s = File.OpenRead(sFileName);
+            using ExcelPackage package = new ExcelPackage(s);
             var sheet1 = package.Workbook.Worksheets.First();
             var listCongTy = _CallWebService.GetDanhSachCongTy(db).OrderBy(a => a.MaBoPhan).ToList();
 
@@ -2086,8 +2074,8 @@ namespace HRM.Api.Services.TuyenDung
             string pathTemplate =PathUploads+ FileName;
             if (File.Exists(pathTemplate) == false)
                 return new MessageReturn(DefineData.eErrorMessage.LoiCapNhat, "Không tìm thấy file xlsx");
-            Stream s = File.OpenRead(pathTemplate);
-            ExcelPackage package = new ExcelPackage(s);
+            using Stream s = File.OpenRead(pathTemplate);
+            using ExcelPackage package = new ExcelPackage(s);
             var listCongTy = _CallWebService.GetDanhSachCongTy(db).OrderBy(a => a.MaBoPhan).ToList();
             var listBoPhan = _CallWebService.GetDanhSachBoPhan(db);
             var listChucDanh = _CallWebService.GetDanhSachChucDanh(db);
@@ -2506,7 +2494,7 @@ namespace HRM.Api.Services.TuyenDung
             int CurrentPage = timKiem.CurrentPage ?? 1;
             int PageSize = timKiem.PageSize ?? 15;
             int Nam = timKiem.Nam ?? 0;
-            IEnumerable<HRM_TuyenDung_KeHoach> listChamCongDaDuyet = from a in db.HRM_TuyenDung_KeHoach
+            IQueryable<HRM_TuyenDung_KeHoach> listChamCongDaDuyet = from a in db.HRM_TuyenDung_KeHoach
                                                                      where (timKiem.IdCongTyEOS == 0 || a.IdCongTyEOS == timKiem.IdCongTyEOS)
                                                                     && a.Nam == Nam
                                                                  && (timKiem.KeyWord == "" || timKiem.KeyWord == null || a.SoPhieu.Contains(timKiem.KeyWord))

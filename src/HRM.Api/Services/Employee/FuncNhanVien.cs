@@ -142,17 +142,20 @@ namespace HRM.Api.Services
         {
             var listBoPhan = _CallWebService.GetDanhSachCongTy(db);
             List<clsNhanVien> DanhSachNhanVien = _CallWebService.GetDanhSachNhanVien(db);
+            var userByEosId = DanhSachNhanVien?
+                .GroupBy(a => a.Id)
+                .ToDictionary(g => g.Key, g => g.First().UserPkid)
+                ?? new Dictionary<long, string>();
             var result = db.HRM_NhanVien.ToList();
             foreach (var item in result)
             {
-                var user = DanhSachNhanVien.FirstOrDefault(a => a.Id == item.IdNhanVienEOS);
-                if (user != null)
+                if (userByEosId.TryGetValue(item.IdNhanVienEOS, out var userPkid))
                 {
-                    item.IdUser = user.UserPkid;
+                    item.IdUser = userPkid;
                     db.Entry(item).State = Microsoft.EntityFrameworkCore.EntityState.Modified;
                 }
-                db.SaveChanges();
             }
+            db.SaveChanges();
             return listBoPhan;
         }
 
@@ -2142,18 +2145,17 @@ namespace HRM.Api.Services
                 model.lstFileDinhKem = listTepDinhKem;
             }
             var fileDinhkemHoSo = db.HRM_NhanVien_FileDinhKemHoSo.Where(r => r.IdNhanVien == IdNhanVien).OrderBy(a => a.Created).ToList();
+            var filesHoSo = FileUploadController.GetListFileDinhKemByIds(db, fileDinhkemHoSo.Select(x => x.IdGuid), nameof(HRM_NhanVien_FileDinhKemHoSo));
             foreach (var item in fileDinhkemHoSo)
             {
-                //var listTepDinhKemHoSo = db.HRM_FileDinhKem.AsNoTracking().Where(x => x.idItem == item.IdGuid && x.TableName == nameof(HRM_NhanVien_FileDinhKemHoSo)
-                //                                                              ).ToList();
                 if (item.NgayCap != null)
                     item.NgayCapUnix = dungchung.DateTimeToUnixTimeStamp(item.NgayCap);
-                item.lstFileDinhKem = FileUploadController.GetListFileDinhKem(db, item.IdGuid, nameof(HRM_NhanVien_FileDinhKemHoSo));
+                item.lstFileDinhKem = filesHoSo[item.IdGuid].ToList();
             }
             model.listFileDinhKemHoSo = new List<HRM_NhanVien_FileDinhKemHoSo>();
             model.listFileDinhKemHoSo = fileDinhkemHoSo.Where(a => a.NgayCap != null).OrderByDescending(a => a.NgayCap).ToList(); ;
             model.listFileDinhKemHoSo.AddRange(fileDinhkemHoSo.Where(a => a.NgayCap == null).OrderByDescending(a => a.NgayCap).ToList());
-            model.listIdCongTy = db.HRM_QuyTrinhBoPhan_BoPhan.Where(a => a.IdQuyTrinh == model.IdGuid).Select(a => a.IdBoPhan).Distinct().ToList();
+            model.listIdCongTy = db.HRM_QuyTrinhBoPhan_BoPhan.AsNoTracking().Where(a => a.IdQuyTrinh == model.IdGuid).Select(a => a.IdBoPhan).Distinct().ToList();
             if ((model.listIdCongTy == null || model.listIdCongTy.Count == 0) && model.IdCongTyEOS > 0)
             {
                 model.listIdCongTy = new List<long>();
@@ -2171,20 +2173,20 @@ namespace HRM.Api.Services
             var listQuanHeGiaDinh = db.HRM_NhanVienQuanHeGiaDinh.AsNoTracking().Where(x => x.IdNhanVien == model.IdGuid).ToList();
             if (listQuanHeGiaDinh.IsNotEmpty())
             {
+                var filesQuanHe = FileUploadController.GetListFileDinhKemByIds(db, listQuanHeGiaDinh.Select(x => x.IdGuid), nameof(HRM_NhanVienQuanHeGiaDinh));
                 foreach (var item in listQuanHeGiaDinh)
                 {
-
                     if (item.NgaySinh != null)
                         item.NgaySinhUnix = dungchung.DateTimeToUnixTimeStamp(item.NgaySinh);
                     item.itemQuanHe = item.IdQuanHe.GetValueFromDic(toDictDMQuanHeGiaDinh);
-                    item.lstFileDinhKem = FileUploadController.GetListFileDinhKem(db, item.IdGuid, nameof(HRM_NhanVienQuanHeGiaDinh));
+                    item.lstFileDinhKem = filesQuanHe[item.IdGuid].ToList();
                 }
             }
             model.ListQuanHeGiaDinhNhanVien = listQuanHeGiaDinh;
             var listGiayToTuyThan = db.HRM_NhanVien_GiayToTuyThan.AsNoTracking().Where(x => x.IdNhanVien == model.IdGuid).OrderByDescending(a => a.NgayCap).ToList();
             if (listGiayToTuyThan.IsNotEmpty())
             {
-                var listNoiCap = db.HRM_dmNoiCap.ToList();
+                var listNoiCap = db.HRM_dmNoiCap.AsNoTracking().ToList();
                 foreach (var item in listGiayToTuyThan)
                 {
                     var noiCap = listNoiCap.FirstOrDefault(a => a.IdGuid == item.NoiCap);
@@ -2202,7 +2204,6 @@ namespace HRM.Api.Services
             if (listThamGiaBaoHiemXaHoi.IsNotEmpty())
             {
                 DateTime dt = DateTime.Today;
-                var listNoiCap = db.HRM_dmNoiCap.ToList();
                 foreach (var item in listThamGiaBaoHiemXaHoi)
                 {
                     if (item.TuNgay != null)
@@ -2244,15 +2245,13 @@ namespace HRM.Api.Services
             var listBangCap = db.HRM_NhanVienBangCap.AsNoTracking().Where(x => x.IdNhanVien == model.IdGuid).OrderByDescending(a => a.NgayTotNghiep).ToList();
             if (listBangCap.IsNotEmpty())
             {
+                var filesBangCap = FileUploadController.GetListFileDinhKemByIds(db, listBangCap.Select(x => x.IdGuid), nameof(HRM_NhanVienBangCap));
                 foreach (var item in listBangCap)
                 {
                     item.itemTrinhDoDaoTao = item.IdTrinhDoDaoTao.GetValueFromDic(toDictDMTrinhDoDaoTao);
-                    //var listTepDinhKemHoSo = db.HRM_FileDinhKem.AsNoTracking().Where(x => x.idItem == item.IdGuid && x.TableName == nameof(HRM_NhanVienBangCap)
-                    //
                     if (item.NgayTotNghiep != null)
                         item.NgayTotNghiepUnix = dungchung.DateTimeToUnixTimeStamp(item.NgayTotNghiep);
-
-                    item.lstFileDinhKem = FileUploadController.GetListFileDinhKem(db, item.IdGuid, nameof(HRM_NhanVienBangCap));
+                    item.lstFileDinhKem = filesBangCap[item.IdGuid].ToList();
                 }
             }
             model.ListNhanVienBangCap = listBangCap;
@@ -2260,6 +2259,7 @@ namespace HRM.Api.Services
             var listNgonNgu = db.HRM_NgonNguNhanVien.AsNoTracking().Where(x => x.IdNhanVien == model.IdGuid).ToList();
             if (listNgonNgu.IsNotEmpty())
             {
+                var filesNgonNgu = FileUploadController.GetListFileDinhKemByIds(db, listNgonNgu.Select(x => x.IdGuid), nameof(HRM_NgonNguNhanVien));
                 foreach (var item in listNgonNgu)
                 {
                     item.NgonNgu = item.IdNgonNgu.GetValueFromDic(toDictDMNgonNgu);
@@ -2267,10 +2267,7 @@ namespace HRM.Api.Services
                     item.itemXepLoaiNoi = item.IdXepLoaiNoi.GetValueFromDic(toDictDMXepLoaiNgonNgu);
                     item.itemXepLoaiDoc = item.IdXepLoaiDoc.GetValueFromDic(toDictDMXepLoaiNgonNgu);
                     item.itemXepLoaiViet = item.IdXepLoaiViet.GetValueFromDic(toDictDMXepLoaiNgonNgu);
-                    //var listTepDinhKemHoSo = db.HRM_FileDinhKem.AsNoTracking().Where(x => x.idItem == item.IdGuid && x.TableName == nameof(HRM_NgonNguNhanVien)
-                    //                                                                   ).ToList();
-                    item.lstFileDinhKem = FileUploadController.GetListFileDinhKem(db, item.IdGuid, nameof(HRM_NgonNguNhanVien));
-
+                    item.lstFileDinhKem = filesNgonNgu[item.IdGuid].ToList();
                 }
             }
             model.ListNhanVienNgonNgu = listNgonNgu;
@@ -2278,44 +2275,34 @@ namespace HRM.Api.Services
             var listChungChi = db.HRM_ChungChiNhanVien.AsNoTracking().Where(x => x.IdNhanVien == model.IdGuid).OrderByDescending(a => a.NgayCap).ToList();
             if (listChungChi.IsNotEmpty())
             {
+                var filesChungChi = FileUploadController.GetListFileDinhKemByIds(db, listChungChi.Select(x => x.IdGuid), nameof(HRM_ChungChiNhanVien));
                 foreach (var item in listChungChi)
                 {
                     item.NhomChungChi = item.IdNhomChungChi.GetValueFromDic(toDictDMNhomChungChi);
                     item.DateTimeToUnix();
-                    //var listTepDinhKemHoSo = db.HRM_FileDinhKem.AsNoTracking().Where(x => x.idItem == item.IdGuid && x.TableName == nameof(HRM_ChungChiNhanVien)
-                    //                                                                        ).ToList();
-                    item.lstFileDinhKem = FileUploadController.GetListFileDinhKem(db, item.IdGuid, nameof(HRM_ChungChiNhanVien));
-
+                    item.lstFileDinhKem = filesChungChi[item.IdGuid].ToList();
                 }
             }
             model.ListNhanVienChungChi = listChungChi;
 
             var listCongTac = db.HRM_QuaTrinhCongTac.AsNoTracking().Where(x => x.IdNhanVien == model.IdGuid).ToList();
-
             if (listCongTac.IsNotEmpty())
             {
-
+                var filesCongTac = FileUploadController.GetListFileDinhKemByIds(db, listCongTac.Select(x => x.IdGuid), nameof(HRM_QuaTrinhCongTac));
                 foreach (var item in listCongTac)
                 {
-                    item.lstFileDinhKem = FileUploadController.GetListFileDinhKem(db, item.IdGuid, nameof(HRM_QuaTrinhCongTac));
-
-                    //item.lstFileDinhKem = db.HRM_FileDinhKem.AsNoTracking().Where(x => x.idItem == item.IdGuid && x.TableName == DefineData.eTable.HRM_QuaTrinhCongTac.ToString()).ToList();
-                    //  item.QuocTich = lstQuocTich.FirstOrDefault(x=>x.IdGuid == item.IdQuocTich);
+                    item.lstFileDinhKem = filesCongTac[item.IdGuid].ToList();
                 }
             }
             model.ListQuaTrinhCongTac = listCongTac;
             model.ListQuaTrinhCongTacNgoaiCongTy = new List<HRM_QuaTrinhCongTacNgoaiCongTy>();
             var listCongTacNuocNgoai = db.HRM_QuaTrinhCongTacNgoaiCongTy.AsNoTracking().Where(x => x.IdNhanVien == model.IdGuid).ToList();
-
             if (listCongTacNuocNgoai.IsNotEmpty())
             {
-
+                var filesCongTacNgoai = FileUploadController.GetListFileDinhKemByIds(db, listCongTacNuocNgoai.Select(x => x.IdGuid), nameof(HRM_QuaTrinhCongTacNgoaiCongTy));
                 foreach (var item in listCongTacNuocNgoai)
                 {
-                    item.lstFileDinhKem = FileUploadController.GetListFileDinhKem(db, item.IdGuid, nameof(HRM_QuaTrinhCongTacNgoaiCongTy));
-
-                    //item.lstFileDinhKem = db.HRM_FileDinhKem.AsNoTracking().Where(x => x.idItem == item.IdGuid && x.TableName == DefineData.eTable.HRM_QuaTrinhCongTacNuocNgoai.ToString()).ToList();
-                    //  item.QuocTich = lstQuocTich.FirstOrDefault(x=>x.IdGuid == item.IdQuocTich);
+                    item.lstFileDinhKem = filesCongTacNgoai[item.IdGuid].ToList();
                 }
             }
             model.ListQuaTrinhCongTacNgoaiCongTy = listCongTacNuocNgoai;
@@ -2437,13 +2424,12 @@ namespace HRM.Api.Services
                 model.lstFileDinhKem = listTepDinhKem;
             }
             var fileDinhkemHoSo = db.HRM_NhanVien_FileDinhKemHoSo.Where(r => r.IdNhanVien == IdNhanVien).ToList();
+            var filesHoSo2 = FileUploadController.GetListFileDinhKemByIds(db, fileDinhkemHoSo.Select(x => x.IdGuid), nameof(HRM_NhanVien_FileDinhKemHoSo));
             foreach (var item in fileDinhkemHoSo)
             {
-                //var listTepDinhKemHoSo = db.HRM_FileDinhKem.AsNoTracking().Where(x => x.idItem == item.IdGuid && x.TableName == nameof(HRM_NhanVien_FileDinhKemHoSo)
-                //                                                              ).ToList();
                 if (item.NgayCap != null)
                     item.NgayCapUnix = dungchung.DateTimeToUnixTimeStamp(item.NgayCap);
-                item.lstFileDinhKem = FileUploadController.GetListFileDinhKem(db, item.IdGuid, nameof(HRM_NhanVien_FileDinhKemHoSo));
+                item.lstFileDinhKem = filesHoSo2[item.IdGuid].ToList();
             }
             model.listFileDinhKemHoSo = fileDinhkemHoSo;
 
@@ -2472,7 +2458,7 @@ namespace HRM.Api.Services
             var listGiayToTuyThan = db.HRM_NhanVien_GiayToTuyThan.AsNoTracking().Where(x => x.IdNhanVien == model.IdGuid).ToList();
             if (listGiayToTuyThan.IsNotEmpty())
             {
-                var listNoiCap = db.HRM_dmNoiCap.ToList();
+                var listNoiCap = db.HRM_dmNoiCap.AsNoTracking().ToList();
                 foreach (var item in listGiayToTuyThan)
                 {
                     var noiCap = listNoiCap.FirstOrDefault(a => a.IdGuid == item.NoiCap);
@@ -2489,15 +2475,13 @@ namespace HRM.Api.Services
             var listBangCap = db.HRM_NhanVienBangCap.AsNoTracking().Where(x => x.IdNhanVien == model.IdGuid).ToList();
             if (listBangCap.IsNotEmpty())
             {
+                var filesBangCap2 = FileUploadController.GetListFileDinhKemByIds(db, listBangCap.Select(x => x.IdGuid), nameof(HRM_NhanVienBangCap));
                 foreach (var item in listBangCap)
                 {
                     item.itemTrinhDoDaoTao = item.IdTrinhDoDaoTao.GetValueFromDic(toDictDMTrinhDoDaoTao);
-                    //var listTepDinhKemHoSo = db.HRM_FileDinhKem.AsNoTracking().Where(x => x.idItem == item.IdGuid && x.TableName == nameof(HRM_NhanVienBangCap)
-                    //
                     if (item.NgayTotNghiep != null)
                         item.NgayTotNghiepUnix = dungchung.DateTimeToUnixTimeStamp(item.NgayTotNghiep);
-
-                    item.lstFileDinhKem = FileUploadController.GetListFileDinhKem(db, item.IdGuid, nameof(HRM_NhanVienBangCap));
+                    item.lstFileDinhKem = filesBangCap2[item.IdGuid].ToList();
                 }
             }
             model.ListNhanVienBangCap = listBangCap;
@@ -2505,6 +2489,7 @@ namespace HRM.Api.Services
             var listNgonNgu = db.HRM_NgonNguNhanVien.AsNoTracking().Where(x => x.IdNhanVien == model.IdGuid).ToList();
             if (listNgonNgu.IsNotEmpty())
             {
+                var filesNgonNgu2 = FileUploadController.GetListFileDinhKemByIds(db, listNgonNgu.Select(x => x.IdGuid), nameof(HRM_NgonNguNhanVien));
                 foreach (var item in listNgonNgu)
                 {
                     item.NgonNgu = item.IdNgonNgu.GetValueFromDic(toDictDMNgonNgu);
@@ -2512,10 +2497,7 @@ namespace HRM.Api.Services
                     item.itemXepLoaiNoi = item.IdXepLoaiNoi.GetValueFromDic(toDictDMXepLoaiNgonNgu);
                     item.itemXepLoaiDoc = item.IdXepLoaiDoc.GetValueFromDic(toDictDMXepLoaiNgonNgu);
                     item.itemXepLoaiViet = item.IdXepLoaiViet.GetValueFromDic(toDictDMXepLoaiNgonNgu);
-                    //var listTepDinhKemHoSo = db.HRM_FileDinhKem.AsNoTracking().Where(x => x.idItem == item.IdGuid && x.TableName == nameof(HRM_NgonNguNhanVien)
-                    //                                                                   ).ToList();
-                    item.lstFileDinhKem = FileUploadController.GetListFileDinhKem(db, item.IdGuid, nameof(HRM_NgonNguNhanVien));
-
+                    item.lstFileDinhKem = filesNgonNgu2[item.IdGuid].ToList();
                 }
             }
             model.ListNhanVienNgonNgu = listNgonNgu;
@@ -2523,44 +2505,34 @@ namespace HRM.Api.Services
             var listChungChi = db.HRM_ChungChiNhanVien.AsNoTracking().Where(x => x.IdNhanVien == model.IdGuid).ToList();
             if (listChungChi.IsNotEmpty())
             {
+                var filesChungChi2 = FileUploadController.GetListFileDinhKemByIds(db, listChungChi.Select(x => x.IdGuid), nameof(HRM_ChungChiNhanVien));
                 foreach (var item in listChungChi)
                 {
                     item.NhomChungChi = item.IdNhomChungChi.GetValueFromDic(toDictDMNhomChungChi);
                     item.DateTimeToUnix();
-                    //var listTepDinhKemHoSo = db.HRM_FileDinhKem.AsNoTracking().Where(x => x.idItem == item.IdGuid && x.TableName == nameof(HRM_ChungChiNhanVien)
-                    //                                                                        ).ToList();
-                    item.lstFileDinhKem = FileUploadController.GetListFileDinhKem(db, item.IdGuid, nameof(HRM_ChungChiNhanVien));
-
+                    item.lstFileDinhKem = filesChungChi2[item.IdGuid].ToList();
                 }
             }
             model.ListNhanVienChungChi = listChungChi;
 
             var listCongTac = db.HRM_QuaTrinhCongTac.AsNoTracking().Where(x => x.IdNhanVien == model.IdGuid).ToList();
-
             if (listCongTac.IsNotEmpty())
             {
-
+                var filesCongTac2 = FileUploadController.GetListFileDinhKemByIds(db, listCongTac.Select(x => x.IdGuid), nameof(HRM_QuaTrinhCongTac));
                 foreach (var item in listCongTac)
                 {
-                    item.lstFileDinhKem = FileUploadController.GetListFileDinhKem(db, item.IdGuid, nameof(HRM_QuaTrinhCongTac));
-
-                    //item.lstFileDinhKem = db.HRM_FileDinhKem.AsNoTracking().Where(x => x.idItem == item.IdGuid && x.TableName == DefineData.eTable.HRM_QuaTrinhCongTac.ToString()).ToList();
-                    //  item.QuocTich = lstQuocTich.FirstOrDefault(x=>x.IdGuid == item.IdQuocTich);
+                    item.lstFileDinhKem = filesCongTac2[item.IdGuid].ToList();
                 }
             }
             model.ListQuaTrinhCongTac = listCongTac;
             model.ListQuaTrinhCongTacNgoaiCongTy = new List<HRM_QuaTrinhCongTacNgoaiCongTy>();
             var listCongTacNuocNgoai = db.HRM_QuaTrinhCongTacNgoaiCongTy.AsNoTracking().Where(x => x.IdNhanVien == model.IdGuid).ToList();
-
             if (listCongTacNuocNgoai.IsNotEmpty())
             {
-
+                var filesCongTacNgoai2 = FileUploadController.GetListFileDinhKemByIds(db, listCongTacNuocNgoai.Select(x => x.IdGuid), nameof(HRM_QuaTrinhCongTacNgoaiCongTy));
                 foreach (var item in listCongTacNuocNgoai)
                 {
-                    item.lstFileDinhKem = FileUploadController.GetListFileDinhKem(db, item.IdGuid, nameof(HRM_QuaTrinhCongTacNgoaiCongTy));
-
-                    //item.lstFileDinhKem = db.HRM_FileDinhKem.AsNoTracking().Where(x => x.idItem == item.IdGuid && x.TableName == DefineData.eTable.HRM_QuaTrinhCongTacNuocNgoai.ToString()).ToList();
-                    //  item.QuocTich = lstQuocTich.FirstOrDefault(x=>x.IdGuid == item.IdQuocTich);
+                    item.lstFileDinhKem = filesCongTacNgoai2[item.IdGuid].ToList();
                 }
             }
             model.ListQuaTrinhCongTacNgoaiCongTy = listCongTacNuocNgoai;
@@ -6032,10 +6004,11 @@ namespace HRM.Api.Services
 
             List<NhatKyNhanVienViewModel> lstNhatKy = Paginate(projected, CurrentPage, nPageSize, out PagingInfor paging);
 
+            var fileLookup = GetFileDinhKemByIds(db, DefineData.eTable.HRM_NhatKyNhanVien.ToString(), lstNhatKy.Select(x => x.IdGuid));
             foreach (var item in lstNhatKy)
             {
                 item.ThoiGianUnix = DateTimeToUnixTimeStamp(item.ThoiGian);
-                item.listFileDinhKem = GetListFileDinhKem(db, DefineData.eTable.HRM_NhatKyNhanVien.ToString(), item.IdGuid);
+                item.listFileDinhKem = fileLookup[item.IdGuid].ToList();
             }
             dynamic dnm = new DynamicObject();
             dnm.paging = paging;
@@ -6047,6 +6020,7 @@ namespace HRM.Api.Services
         public dynamic GetLichSuNhanVien(ApplicationDbContext db, string Id)
         {
             var item = db.HRM_NhatKyNhanVien.Find(Id);
+            if (item == null) return null;
             item.ThoiGianUnix = DateTimeToUnixTimeStamp(item.ThoiGian);
             item.listFileDinhKem = GetListFileDinhKem(db, DefineData.eTable.HRM_NhatKyNhanVien.ToString(), item.IdGuid);
             return item;
@@ -8251,15 +8225,14 @@ namespace HRM.Api.Services
         public void UpdateNhanSu(ApplicationDbContext db)
         {
             var list = db.HRM_NhanVien.ToList();
-            var listCCCD = db.HRM_NhanVien_GiayToTuyThan.Where(a => a.isApDung == true).ToList();
-            var listeMail = db.HRM_NhanVien_Email.Where(a => a.isApDung == true).ToList();
-            var listSDT = db.HRM_NhanVien_SoDienThoai.Where(a => a.isApDung == true).ToList();
-            List<HRM_NhanVienBangCap> ListNhanVienBangCap = new List<HRM_NhanVienBangCap>();
+            var cccdByNv = db.HRM_NhanVien_GiayToTuyThan.AsNoTracking().Where(a => a.isApDung == true).ToLookup(a => a.IdNhanVien);
+            var emailByNv = db.HRM_NhanVien_Email.AsNoTracking().Where(a => a.isApDung == true).ToLookup(a => a.IdNhanVien);
+            var sdtByNv = db.HRM_NhanVien_SoDienThoai.AsNoTracking().Where(a => a.isApDung == true).ToLookup(a => a.IdNhanVien);
             foreach (var aModel in list)
             {
-                aModel.listEmail = listeMail.Where(a => a.IdNhanVien == aModel.IdGuid).ToList();
-                aModel.listSoDienThoai = listSDT.Where(a => a.IdNhanVien == aModel.IdGuid).ToList();
-                aModel.listGiayToTuyThan = listCCCD.Where(a => a.IdNhanVien == aModel.IdGuid).ToList();
+                aModel.listEmail = emailByNv[aModel.IdGuid].ToList();
+                aModel.listSoDienThoai = sdtByNv[aModel.IdGuid].ToList();
+                aModel.listGiayToTuyThan = cccdByNv[aModel.IdGuid].ToList();
                 clsNhanVien _clsNhanVien = _CallWebService.SetNhanSuCreateUser(db, aModel);
                 aModel.IdUser = _clsNhanVien.UserPkid;
                 aModel.IdNhanVienEOS = _clsNhanVien.Id;
@@ -8493,7 +8466,7 @@ namespace HRM.Api.Services
                 int nCurrentPage = TimKiem.CurrentPage ?? 0;
                 int nTabTrangThai = TimKiem.TabTrangThai ?? 0;
                 int PageSize = TimKiem.PageSize ?? 25;
-                IEnumerable<HRM_NhanVienDieuChinhThongTin> result;
+                IQueryable<HRM_NhanVienDieuChinhThongTin> result;
                 if (TimKiem.TabTrangThai == 1)
 
                     result = from a in db.HRM_NhanVienDieuChinhThongTin
@@ -8518,11 +8491,7 @@ namespace HRM.Api.Services
                 if (TimKiem.KeyWord != null && TimKiem.KeyWord != "")
                     result = result.Where(a => a.MaNhanVien.ToLower().Contains(TimKiem.KeyWord.ToLower().Trim()) || a.TenNhanVien.ToLower().Contains(TimKiem.KeyWord.ToLower().Trim()));
 
-                var itemList = result.ToList();
-                int nSum = itemList.Count;
-                int nTotalPage = nSum / nCurrentPage;
-                PagingInfor paging = new PagingInfor(nCurrentPage, nSum, nTotalPage);
-                itemList = itemList.Skip(PageSize * (nCurrentPage - 1)).Take(PageSize).ToList();
+                var itemList = Paginate(result.AsNoTracking(), nCurrentPage, PageSize, out PagingInfor paging);
                 List<string> listId = result.Select(a => a.IdGuid).ToList();
                 var listThayDoi = db.HRM_NhanVienDieuChinhThongTin_ThongTin.Where(a => listId.Contains(a.IdPhieuThayDoi)).ToList();
                 //List<BoPhan> BoPhans = _CallWebService.GetDanhSachBoPhan(db);
@@ -8701,19 +8670,17 @@ namespace HRM.Api.Services
                 model.lstFileDinhKem = listTepDinhKem;
             }
             var fileDinhkemHoSo = db.HRM_NhanVien_FileDinhKemHoSo.Where(r => r.IdNhanVien == IdNhanVien).ToList();
+            var filesHoSo3 = FileUploadController.GetListFileDinhKemByIds(db, fileDinhkemHoSo.Select(x => x.IdGuid), nameof(HRM_NhanVien_FileDinhKemHoSo));
             foreach (var item in fileDinhkemHoSo)
             {
-                //var listTepDinhKemHoSo = db.HRM_FileDinhKem.AsNoTracking().Where(x => x.idItem == item.IdGuid && x.TableName == nameof(HRM_NhanVien_FileDinhKemHoSo)
-                //                                                              ).ToList();
                 if (item.NgayCap != null)
                     item.NgayCapUnix = dungchung.DateTimeToUnixTimeStamp(item.NgayCap);
-                item.lstFileDinhKem = FileUploadController.GetListFileDinhKem(db, item.IdGuid, nameof(HRM_NhanVien_FileDinhKemHoSo));
+                item.lstFileDinhKem = filesHoSo3[item.IdGuid].ToList();
             }
             model.listFileDinhKemHoSo = fileDinhkemHoSo;
             var listThamGiaBaoHiemXaHoi = db.HRM_QuaTrinhThamGiaBaoHiemXaHoi.AsNoTracking().Where(x => x.IdNhanVien == model.IdGuid).OrderByDescending(a => a.TuNgay).ToList();
             if (listThamGiaBaoHiemXaHoi.IsNotEmpty())
             {
-                var listNoiCap = db.HRM_dmNoiCap.ToList();
                 foreach (var item in listThamGiaBaoHiemXaHoi)
                 {
                     if (item.TuNgay != null)
@@ -8750,12 +8717,12 @@ namespace HRM.Api.Services
             var listBangCap = db.HRM_NhanVienBangCap.AsNoTracking().Where(x => x.IdNhanVien == model.IdGuid).ToList();
             if (listBangCap.IsNotEmpty())
             {
+                var filesBangCap3 = FileUploadController.GetListFileDinhKemByIds(db, listBangCap.Select(x => x.IdGuid), nameof(HRM_NhanVienBangCap));
                 foreach (var item in listBangCap)
                 {
                     if (item.NgayTotNghiep != null)
                         item.NgayTotNghiepUnix = dungchung.DateTimeToUnixTimeStamp(item.NgayTotNghiep);
-
-                    item.lstFileDinhKem = FileUploadController.GetListFileDinhKem(db, item.IdGuid, nameof(HRM_NhanVienBangCap));
+                    item.lstFileDinhKem = filesBangCap3[item.IdGuid].ToList();
                 }
             }
             model.ListNhanVienBangCap = listBangCap;
@@ -8763,10 +8730,10 @@ namespace HRM.Api.Services
             var listNgonNgu = db.HRM_NgonNguNhanVien.AsNoTracking().Where(x => x.IdNhanVien == model.IdGuid).ToList();
             if (listNgonNgu.IsNotEmpty())
             {
+                var filesNgonNgu3 = FileUploadController.GetListFileDinhKemByIds(db, listNgonNgu.Select(x => x.IdGuid), nameof(HRM_NgonNguNhanVien));
                 foreach (var item in listNgonNgu)
                 {
-                    item.lstFileDinhKem = FileUploadController.GetListFileDinhKem(db, item.IdGuid, nameof(HRM_NgonNguNhanVien));
-
+                    item.lstFileDinhKem = filesNgonNgu3[item.IdGuid].ToList();
                 }
             }
             model.ListNhanVienNgonNgu = listNgonNgu;
@@ -8774,38 +8741,32 @@ namespace HRM.Api.Services
             var listChungChi = db.HRM_ChungChiNhanVien.AsNoTracking().Where(x => x.IdNhanVien == model.IdGuid).ToList();
             if (listChungChi.IsNotEmpty())
             {
+                var filesChungChi3 = FileUploadController.GetListFileDinhKemByIds(db, listChungChi.Select(x => x.IdGuid), nameof(HRM_ChungChiNhanVien));
                 foreach (var item in listChungChi)
                 {
-                    item.lstFileDinhKem = FileUploadController.GetListFileDinhKem(db, item.IdGuid, nameof(HRM_ChungChiNhanVien));
-
+                    item.lstFileDinhKem = filesChungChi3[item.IdGuid].ToList();
                 }
             }
             model.ListNhanVienChungChi = listChungChi;
 
             var listCongTac = db.HRM_QuaTrinhCongTac.AsNoTracking().Where(x => x.IdNhanVien == model.IdGuid).ToList();
-
             if (listCongTac.IsNotEmpty())
             {
-
+                var filesCongTac3 = FileUploadController.GetListFileDinhKemByIds(db, listCongTac.Select(x => x.IdGuid), nameof(HRM_QuaTrinhCongTac));
                 foreach (var item in listCongTac)
                 {
-                    item.lstFileDinhKem = FileUploadController.GetListFileDinhKem(db, item.IdGuid, nameof(HRM_QuaTrinhCongTac));
-
+                    item.lstFileDinhKem = filesCongTac3[item.IdGuid].ToList();
                 }
             }
             model.ListQuaTrinhCongTac = listCongTac;
             model.ListQuaTrinhCongTacNgoaiCongTy = new List<HRM_QuaTrinhCongTacNgoaiCongTy>();
             var listCongTacNuocNgoai = db.HRM_QuaTrinhCongTacNgoaiCongTy.AsNoTracking().Where(x => x.IdNhanVien == model.IdGuid).ToList();
-
             if (listCongTacNuocNgoai.IsNotEmpty())
             {
-
+                var filesCongTacNgoai3 = FileUploadController.GetListFileDinhKemByIds(db, listCongTacNuocNgoai.Select(x => x.IdGuid), nameof(HRM_QuaTrinhCongTacNgoaiCongTy));
                 foreach (var item in listCongTacNuocNgoai)
                 {
-                    item.lstFileDinhKem = FileUploadController.GetListFileDinhKem(db, item.IdGuid, nameof(HRM_QuaTrinhCongTacNgoaiCongTy));
-
-                    //item.lstFileDinhKem = db.HRM_FileDinhKem.AsNoTracking().Where(x => x.idItem == item.IdGuid && x.TableName == DefineData.eTable.HRM_QuaTrinhCongTacNuocNgoai.ToString()).ToList();
-                    //  item.QuocTich = lstQuocTich.FirstOrDefault(x=>x.IdGuid == item.IdQuocTich);
+                    item.lstFileDinhKem = filesCongTacNgoai3[item.IdGuid].ToList();
                 }
             }
             model.ListQuaTrinhCongTacNgoaiCongTy = listCongTacNuocNgoai;
@@ -9044,215 +9005,4 @@ namespace HRM.Api.Services
                         ngonNgu.IdNhanVien = aModel.IdGuid;
                         if (ngonNgu.lstFileDinhKem.IsNotEmpty())
                             FileUploadController.SetFileDinhKem(_dbContext, ngonNgu.lstFileDinhKem, nameof(HRM_NgonNguNhanVien).ToString(), ngonNgu.IdGuid);
-                        //listFileCreate.Add(new EntityAddFileDinhKemModel(ngonNgu.lstFileDinhKemMoi, ngonNgu.IdGuid, nameof(HRM_NgonNguNhanVien), DefineData.eFlagDinhKem.FileDinhKem));
-
-                    }
-                    _dbContext.HRM_NgonNguNhanVien.AddRange(aModel.ListNhanVienNgonNgu);
-                }
-                #endregion
-                #region Chứng chỉ
-                if (aModel.ListNhanVienChungChi.IsNotEmpty())
-                {
-                    foreach (var chungChi in aModel.ListNhanVienChungChi)
-                    {
-                        chungChi.UnixToDateTime();
-                        //if (string.IsNullOrEmpty(chungChi.IdGuid))
-                        chungChi.IdGuid = Guid.NewGuid().ToString();
-                        chungChi.IdNhanVien = aModel.IdGuid;
-                        if (chungChi.lstFileDinhKem.IsNotEmpty())
-                            FileUploadController.SetFileDinhKem(_dbContext, chungChi.lstFileDinhKem, nameof(HRM_ChungChiNhanVien).ToString(), chungChi.IdGuid);
-                        //listFileCreate.Add(new EntityAddFileDinhKemModel(chungChi.lstFileDinhKemMoi, chungChi.IdGuid, nameof(HRM_ChungChiNhanVien), DefineData.eFlagDinhKem.FileDinhKem));
-
-
-                    }
-                    _dbContext.HRM_ChungChiNhanVien.AddRange(aModel.ListNhanVienChungChi);
-                }
-                #endregion
-                #region  Quá trình công tác
-                if (aModel.ListQuaTrinhCongTac.IsNotEmpty())
-                {
-                    foreach (var congTac in aModel.ListQuaTrinhCongTac)
-                    {
-                        //if (string.IsNullOrEmpty(congTac.IdGuid))
-                        congTac.IdGuid = Guid.NewGuid().ToString();
-                        congTac.IdNhanVien = aModel.IdGuid;
-                        if (congTac.lstFileDinhKem.IsNotEmpty())
-                            FileUploadController.SetFileDinhKem(_dbContext, congTac.lstFileDinhKem, nameof(HRM_QuaTrinhCongTac).ToString(), congTac.IdGuid);
-                        //listFileCreate.Add(new EntityAddFileDinhKemModel(congTac.lstFileDinhKemMoi, congTac.IdGuid, nameof(HRM_QuaTrinhCongTac), DefineData.eFlagDinhKem.FileDinhKem));
-
-                    }
-                    _dbContext.HRM_QuaTrinhCongTac.AddRange(aModel.ListQuaTrinhCongTac);
-                }
-                #endregion
-                #region  Quá trình công tác nước ngoài
-                if (aModel.ListQuaTrinhCongTacNgoaiCongTy.IsNotEmpty())
-                {
-                    foreach (var congTac in aModel.ListQuaTrinhCongTacNgoaiCongTy)
-                    {
-                        //if (string.IsNullOrEmpty(congTac.IdGuid))
-                        congTac.IdGuid = Guid.NewGuid().ToString();
-                        congTac.IdNhanVien = aModel.IdGuid;
-                        if (congTac.lstFileDinhKem.IsNotEmpty())
-                            FileUploadController.SetFileDinhKem(_dbContext, congTac.lstFileDinhKem, nameof(HRM_QuaTrinhCongTacNgoaiCongTy).ToString(), congTac.IdGuid);
-                        //listFileCreate.Add(new EntityAddFileDinhKemModel(congTac.lstFileDinhKemMoi, congTac.IdGuid, nameof(HRM_QuaTrinhCongTacNgoaiCongTy), DefineData.eFlagDinhKem.FileDinhKem));
-
-                    }
-                    _dbContext.HRM_QuaTrinhCongTacNgoaiCongTy.AddRange(aModel.ListQuaTrinhCongTacNgoaiCongTy);
-                }
-                #endregion
-
-                #region Ngân hàng
-                if (aModel.ListNganHang.IsNotEmpty())
-                {
-                    foreach (var nganHang in aModel.ListNganHang)
-                    {
-                        nganHang.IdGuid = Guid.NewGuid().ToString();
-                        nganHang.idNhanVien = aModel.IdGuid;
-
-                    }
-                    _dbContext.HRM_NhanVien_TaiKhoanNganHang.AddRange(aModel.ListNganHang);
-                }
-                #endregion
-                #region Quan hệ gia đình
-                if (aModel.ListQuanHeGiaDinhNhanVien.IsNotEmpty())
-                {
-                    foreach (var giaDinh in aModel.ListQuanHeGiaDinhNhanVien)
-                    {
-                        if (giaDinh.NgaySinhUnix > 0)
-                            giaDinh.NgaySinh = dungchung.UnixTimeStampToDateTime(giaDinh.NgaySinhUnix);
-                        //if (string.IsNullOrEmpty(giaDinh.IdGuid))
-                        giaDinh.IdGuid = Guid.NewGuid().ToString();
-                        giaDinh.IdNhanVien = aModel.IdGuid;
-                        if (giaDinh.lstFileDinhKem.IsNotEmpty())
-                            FileUploadController.SetFileDinhKem(_dbContext, giaDinh.lstFileDinhKem, nameof(HRM_NhanVienQuanHeGiaDinh).ToString(), giaDinh.IdGuid);
-                        //listFileCreate.Add(new EntityAddFileDinhKemModel(giaDinh.lstFileDinhKemMoi, giaDinh.IdGuid, nameof(HRM_NhanVienQuanHeGiaDinh), DefineData.eFlagDinhKem.FileDinhKem));
-
-                    }
-                    _dbContext.HRM_NhanVienQuanHeGiaDinh.AddRange(aModel.ListQuanHeGiaDinhNhanVien);
-                }
-                #endregion
-                _dbContext.SaveChanges();
-
-
-                result = new MessageReturn(DefineData.eErrorMessage.CapNhatThanhCong, "Cập nhật dữ liệu nhân viên thành công", aModel.IdGuid);
-
-            }
-            catch (Exception ex)
-            {
-
-                return new MessageReturn(DefineData.eErrorMessage.LoiCapNhat, ex.ToString());
-            }
-
-
-            return result;
-        }
-    }
-    public class DH_TimKiemNhanVien
-    {
-        public long IdCongTy { get; set; }
-        public List<string> IdUsers { get; set; }
-    }
-    public class SearchNhanVienViewModel
-    {
-        public string KeyWord { set; get; }
-        public int CurrentPage { set; get; }
-        public int PageSize { set; get; }
-        public long IdCongTyEOS { set; get; }
-        //public double TuNgayUnix { set; get; }
-        //public double ToiNgayUnix { set; get; }
-        public int TrangThaiNhanVien { set; get; } // 0 tất cả,1 "DangLamViec" ,2 "DaNghiViec" 3, Sắp nghỉ hưu
-        public int TrangThaiHopDong { set; get; } ///0 tất cả- 1 săp hết hạn hợp đồng
-        //  public string GioiTinh { set; get; }
-    }
-    public class BaoCaoNhanVienViewModel
-    {
-
-        public string IdNhanVien { set; get; }
-        public string IddmTrinhDo { set; get; }
-        public string TrinhDoChuyenMon { set; get; }
-        public string DiaChi { set; get; }
-        public DateTime? NgayBatDauLamViec { set; get; }
-        public double NgayBatDauLamViecUnix { set; get; }
-        public string TenNhanVien { set; get; }
-        public string MaNhanVien { set; get; }
-        public string Email { set; get; }
-        public string TrangThai { set; get; }
-        public long IdCongTyEOS { set; get; }
-        public string TenCongTyEOS { set; get; }
-        public long IddmChucVu { set; get; }
-        public string TenChucVu { set; get; }
-        public string DienThoai { set; get; }
-        public DateTime? NgaySinh { set; get; }
-        public double NgaySinhUnix { set; get; }
-        public DateTime? NgayNghiViec { set; get; }
-        public double NgayNghiViecUnix { set; get; }
-        public string GioiTinh { set; get; }
-        public DateTime? NgayHieuLuc { set; get; }
-        public double NgayHieuLucUnix { set; get; }
-        public DateTime? NgayHetHan { set; get; }
-        public double NgayHetHanUnix { set; get; }
-        public string TenTrangThaiNhanVien { set; get; }
-        public int TrangThaiHopDong { set; get; } ///0 tất cả- 1 Sắp về hưu - 2 săp hết hạn hợp đồng
-        public string TenTrangThaiHopDong { set; get; }
-
-    }
-    public class NhanVienBoPhanViewModel
-    {
-
-        public string IdNhanVien { set; get; }
-        public string IdHopDong { set; get; }
-        public long IdBoPhanEOS { set; get; }
-        public long IdChucVuEOS { set; get; }
-        public long IddmChucVu { set; get; }
-        public long IddmChucDanh { set; get; }
-        public string TenChucVu { set; get; }
-        public string IdUser { set; get; }
-        public string TenNhanVien { set; get; }
-        public string TenBoPhan { set; get; }
-        public string MaNhanVien { set; get; }
-
-    }
-
-    public class NhatKyNhanVienViewModel
-    {
-        public string IdGuid { set; get; }
-        public string IdNhanVien { set; get; }
-
-        public string TenNhanVien { set; get; }
-
-        public string IdTable { set; get; }
-
-        public string TableName { set; get; }
-        public string eAction { set; get; }
-
-        public string Link { set; get; }
-        public int Loai { set; get; }
-
-        public string QuyTrinh { set; get; }
-        public DateTime ThoiGian { set; get; }
-
-        public double ThoiGianUnix { set; get; }
-        public List<HRM_FileDinhKem> listFileDinhKem { get; set; }
-    }
-
-    public class NhanVienCongTyViewModel
-    {
-        public string IdUser { set; get; }
-        public string IdGuid { set; get; }
-        public string TenDayDu { set; get; }
-        public string MaNhanVien { set; get; }
-
-        public long IdCongTyEOS { set; get; }
-        public long IdBoPhanEOS { set; get; }
-        public string TenBoPhan { set; get; }
-        public long IddmChucVu { set; get; }
-        public string TenChucVu { set; get; }
-        public long IddmChucDanh { set; get; }
-        public string IdGioiTinh { set; get; }
-        public string IddmTrinhDo { set; get; }
-        public long IdNhanVienEOS { set; get; }
-        public string IdLoaiNhanVien { set; get; }
-        public string IdQuocTich { set; get; }
-
-    }
-}
+... [truncated for diff preview]

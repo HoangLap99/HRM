@@ -1,4 +1,4 @@
-﻿﻿#nullable disable
+﻿#nullable disable
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -1029,7 +1029,7 @@ namespace HRM.Api.Services
                 int nCurrentPage = TimKiem.CurrentPage ?? 0;
                 int nTabTrangThai = TimKiem.TabTrangThai ?? 0;
                 int PageSize = TimKiem.PageSize ?? 25;
-                IEnumerable<HRM_dmAnCa> result = from a in db.HRM_dmAnCa
+                IQueryable<HRM_dmAnCa> result = from a in db.HRM_dmAnCa
                                                  orderby a.Created descending
                                                  select a;
                 if (TimKiem.KeyWord != null && TimKiem.KeyWord != "")
@@ -2227,8 +2227,8 @@ namespace HRM.Api.Services
                 DateTime dt = DateTime.Now;
                 string sFileNameCopy = HrmOptions.PathUploads + "ThuVienDanhGiaDownload_" + dt.ToOADate() + ".xlsx";
                 File.Copy(sFileName, sFileNameCopy, true);
-                Stream s = File.OpenRead(sFileNameCopy);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(sFileNameCopy);
+                using ExcelPackage package = new ExcelPackage(s);
 
                 s.Close();
                 byte[] bytee = package.GetAsByteArray();
@@ -2249,8 +2249,8 @@ namespace HRM.Api.Services
             try
             {
                 string sFileName = HrmOptions.PathUploads + FileName;
-                Stream s = File.OpenRead(sFileName);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(sFileName);
+                using ExcelPackage package = new ExcelPackage(s);
                 ExcelWorksheet sheet1 = package.Workbook.Worksheets.First();
 
                 var listColumnName = new List<string>();
@@ -2418,8 +2418,8 @@ namespace HRM.Api.Services
                 DateTime dt = DateTime.Now;
                 string sFileNameCopy = HrmOptions.PathUploads + "ThuVienDanhGiaDownload_" + dt.ToOADate() + ".xlsx";
                 File.Copy(sFileName, sFileNameCopy, true);
-                Stream s = File.OpenRead(sFileNameCopy);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(sFileNameCopy);
+                using ExcelPackage package = new ExcelPackage(s);
                 var ListDanhMuc = _dbContext.HRM_dmTinh.ToList();
                 ExcelWorksheet sheet1 = package.Workbook.Worksheets["Danh Mục"];
                 int nRow = 3;
@@ -2447,8 +2447,8 @@ namespace HRM.Api.Services
             try
             {
                 string sFileName = HrmOptions.PathUploads + FileName;
-                Stream s = File.OpenRead(sFileName);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(sFileName);
+                using ExcelPackage package = new ExcelPackage(s);
                 ExcelWorksheet sheet1 = package.Workbook.Worksheets.First();
 
                 var listColumnName = new List<string>();
@@ -2612,8 +2612,8 @@ namespace HRM.Api.Services
                 DateTime dt = DateTime.Now;
                 string sFileNameCopy = HrmOptions.PathUploads + "ThuVienDanhGiaDownload_" + dt.ToOADate() + ".xlsx";
                 File.Copy(sFileName, sFileNameCopy, true);
-                Stream s = File.OpenRead(sFileNameCopy);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(sFileNameCopy);
+                using ExcelPackage package = new ExcelPackage(s);
                 var ListDanhMuc = _dbContext.HRM_dmTinh.ToList();
                 ExcelWorksheet sheet1 = package.Workbook.Worksheets["Danh Mục"];
                 int nRow = 3;
@@ -2641,8 +2641,8 @@ namespace HRM.Api.Services
             try
             {
                 string sFileName = HrmOptions.PathUploads + FileName;
-                Stream s = File.OpenRead(sFileName);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(sFileName);
+                using ExcelPackage package = new ExcelPackage(s);
                 ExcelWorksheet sheet1 = package.Workbook.Worksheets.First();
 
                 var listColumnName = new List<string>();
@@ -3563,11 +3563,11 @@ namespace HRM.Api.Services
                 TimKiem itemTimKiem = JsonConvert.DeserializeObject(dnm.ToString(), typeof(TimKiem)) as TimKiem;
                 int nCurrentPage = itemTimKiem.CurrentPage ?? 0;
                 int PageSize = itemTimKiem.PageSize ?? 0;
-                IEnumerable<HRM_dmTieuChi> result = (from a in db.HRM_dmTieuChi
+                IQueryable<HRM_dmTieuChi> result = (from a in db.HRM_dmTieuChi
                                                      orderby a.Created descending
                                                      select a);
                 if (!string.IsNullOrEmpty(itemTimKiem.KeyWord))
-                    result = result.Where(a => a.Ten.ToLower().Contains(itemTimKiem.KeyWord.ToLower().Trim())).ToList();
+                    result = result.Where(a => a.Ten.ToLower().Contains(itemTimKiem.KeyWord.ToLower().Trim()));
                 List<HRM_dmTieuChi_CauHoi> listCauHoi = db.HRM_dmTieuChi_CauHoi.ToList();
                 var listItem = result.ToList();
                 foreach (HRM_dmTieuChi item in listItem)
@@ -4383,7 +4383,7 @@ namespace HRM.Api.Services
             ErrorMessage err = new ErrorMessage(ErrorMessage.eState.ThanhCong);
             try
             {
-                IEnumerable<HRM_ThuVienDanhGia> result = from a in _dbContext.HRM_ThuVienDanhGia
+                IQueryable<HRM_ThuVienDanhGia> result = from a in _dbContext.HRM_ThuVienDanhGia
                                                          where ((!string.IsNullOrEmpty(timKiem.Keyword) && (a.Ma.ToLower().Contains(timKiem.Keyword.Trim().ToLower()) || a.Ten.ToLower().Contains(timKiem.Keyword.Trim().ToLower()))) || string.IsNullOrEmpty(timKiem.Keyword))
                                                          orderby a.Created descending
                                                          select a;
@@ -4702,8 +4702,8 @@ namespace HRM.Api.Services
                     err.SetLoiKhac("Chưa chọn danh mục nào!");
                     return err;
                 }
-                IEnumerable<HRM_ThuVienDanhGia> ThuViens = _dbContext.HRM_ThuVienDanhGia.Where(a => listID.Contains(a.IdGuid));
-                IEnumerable<HRM_ThuVienDanhGia_Item> listItem = _dbContext.HRM_ThuVienDanhGia_Item.Where(a => listID.Contains(a.IdThuVienDanhGia));
+                IQueryable<HRM_ThuVienDanhGia> ThuViens = _dbContext.HRM_ThuVienDanhGia.Where(a => listID.Contains(a.IdGuid));
+                IQueryable<HRM_ThuVienDanhGia_Item> listItem = _dbContext.HRM_ThuVienDanhGia_Item.Where(a => listID.Contains(a.IdThuVienDanhGia));
                 List<string> IdNhanSus = listItem.Select(x => x.IdGuid).ToList();
                 var danhGia_NhanSus = _dbContext.HRM_ThuVienDanhGia_NhanSu.Where(x => IdNhanSus.Contains(x.IdThuVienDanhGiaItem)).ToList();
                 if (ThuViens != null)
@@ -4735,8 +4735,8 @@ namespace HRM.Api.Services
                 DateTime dt = DateTime.Now;
                 string sFileNameCopy = HrmOptions.PathUploads + "ThuVienDanhGiaDownload_" + dt.ToOADate() + ".xlsx";
                 File.Copy(sFileName, sFileNameCopy, true);
-                Stream s = File.OpenRead(sFileNameCopy);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(sFileNameCopy);
+                using ExcelPackage package = new ExcelPackage(s);
                 if (!String.IsNullOrEmpty(Id))
                 {
                     ExcelWorksheet sheetThuVien = package.Workbook.Worksheets[1];
@@ -4833,8 +4833,8 @@ namespace HRM.Api.Services
             try
             {
                 string sFileName = HrmOptions.PathUploads + FileName;
-                Stream s = File.OpenRead(sFileName);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(sFileName);
+                using ExcelPackage package = new ExcelPackage(s);
                 ExcelWorksheet ListThuVien = package.Workbook.Worksheets["Thư viện đánh giá"];
                 ExcelWorksheet ListItem = package.Workbook.Worksheets["Đánh giá"];
 
@@ -5033,7 +5033,7 @@ namespace HRM.Api.Services
             {
                 int nCurrentPage = TimKiem.CurrentPage ?? 0;
                 int PageSize = TimKiem.PageSize ?? 25;
-                IEnumerable<HRM_dmCapBacLuong> result = from a in db.HRM_dmCapBacLuong
+                IQueryable<HRM_dmCapBacLuong> result = from a in db.HRM_dmCapBacLuong
                                                         orderby a.SapXep
                                                         select a;
                 if (TimKiem.KeyWord != null && TimKiem.KeyWord != "")
@@ -5043,9 +5043,9 @@ namespace HRM.Api.Services
 
                 if (TimKiem.IddmChucDanh > 0)
                 {
+                    var idChucDanhToken = "," + TimKiem.IddmChucDanh.ToString().Trim() + ",";
                     result = result.Where(a => !string.IsNullOrEmpty(a.IdViTriLamViecs)
-                    && ((!a.IdViTriLamViecs.Contains(",") && a.IdViTriLamViecs == TimKiem.IddmChucDanh.ToString().Trim())
-                   || (a.IdViTriLamViecs.Split(',').Contains(TimKiem.IddmChucDanh.ToString().Trim()))));
+                        && ("," + a.IdViTriLamViecs + ",").Contains(idChucDanhToken));
                 }
                 if (nCurrentPage == 0)
                 {
@@ -5221,8 +5221,8 @@ namespace HRM.Api.Services
             try
             {
                 string sFileName = HrmOptions.PathUploads + FileName;
-                Stream s = File.OpenRead(sFileName);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(sFileName);
+                using ExcelPackage package = new ExcelPackage(s);
                 ExcelWorksheet sheet = package.Workbook.Worksheets.First();
                 DateTime a = DateTime.Now;
                 List<HRM_QuyTrinhXuLy> list = new List<HRM_QuyTrinhXuLy>();
@@ -5475,8 +5475,8 @@ namespace HRM.Api.Services
                 DateTime dt = DateTime.Now;
                 string sFileNameCopy = HrmOptions.PathUploads + "ThuVienDanhGiaDownload_" + dt.ToOADate() + ".xlsx";
                 File.Copy(sFileName, sFileNameCopy, true);
-                Stream s = File.OpenRead(sFileNameCopy);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(sFileNameCopy);
+                using ExcelPackage package = new ExcelPackage(s);
                 var listDanhMuc = _dbContext.HRM_dmNhomCauHoi.Where(a => listId.Contains(a.IdGuid)).ToList();
                 if (listDanhMuc != null && listDanhMuc.Count > 0)
                 {
@@ -5512,8 +5512,8 @@ namespace HRM.Api.Services
             try
             {
                 string sFileName = HrmOptions.PathUploads + FileName;
-                Stream s = File.OpenRead(sFileName);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(sFileName);
+                using ExcelPackage package = new ExcelPackage(s);
                 ExcelWorksheet sheet1 = package.Workbook.Worksheets.First();
                 var listColumnName = new List<string>();
                 string[] ColumnNames = new string[] { "STT", "Mã", "Tên", "Ghi chú" };
@@ -5565,7 +5565,7 @@ namespace HRM.Api.Services
             TimKiem itemTimKiem = JsonConvert.DeserializeObject(dnm.ToString(), typeof(TimKiem)) as TimKiem;
             int nCurrentPage = itemTimKiem.CurrentPage ?? 0;
             int PageSize = itemTimKiem.PageSize ?? 20;
-            IEnumerable<HRM_dmCauHoi> result = from a in db.HRM_dmCauHoi
+            IQueryable<HRM_dmCauHoi> result = from a in db.HRM_dmCauHoi
                                                where (string.IsNullOrEmpty(itemTimKiem.KeyWord) || (!string.IsNullOrEmpty(itemTimKiem.KeyWord) && (a.NoiDung.ToUpper().Contains(itemTimKiem.KeyWord.Trim().ToUpper()) || a.Ma.ToUpper().Contains(itemTimKiem.KeyWord.Trim().ToUpper()))))
                                                orderby a.Created
                                                select a;
@@ -5698,8 +5698,8 @@ namespace HRM.Api.Services
                 DateTime dt = DateTime.Now;
                 string sFileNameCopy = HrmOptions.PathUploads + "ThuVienDanhGiaDownload_" + dt.ToOADate() + ".xlsx";
                 File.Copy(sFileName, sFileNameCopy, true);
-                Stream s = File.OpenRead(sFileNameCopy);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(sFileNameCopy);
+                using ExcelPackage package = new ExcelPackage(s);
 
                 if (listDanhMuc != null && listDanhMuc.Count > 0)
                 {
@@ -5765,8 +5765,8 @@ namespace HRM.Api.Services
             try
             {
                 string sFileName = HrmOptions.PathUploads + FileName;
-                Stream s = File.OpenRead(sFileName);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(sFileName);
+                using ExcelPackage package = new ExcelPackage(s);
                 ExcelWorksheet sheet1 = package.Workbook.Worksheets["Câu hỏi"];
                 ExcelWorksheet sheet2 = package.Workbook.Worksheets["Câu trả lời"];
                 var listColumnName = new List<string>();
@@ -6285,7 +6285,7 @@ namespace HRM.Api.Services
             TimKiem itemTimKiem = JsonConvert.DeserializeObject(dnm.ToString(), typeof(TimKiem)) as TimKiem;
             int nCurrentPage = itemTimKiem.CurrentPage ?? 1;
             int PageSize = itemTimKiem.PageSize ?? 20;
-            IEnumerable<HRM_dmQuyDinhCongTacPhi> result = from a in db.HRM_dmQuyDinhCongTacPhi
+            IQueryable<HRM_dmQuyDinhCongTacPhi> result = from a in db.HRM_dmQuyDinhCongTacPhi
                                                           orderby a.Created
                                                           select a;
             if (itemTimKiem.IdBoPhan > 0)
@@ -6401,7 +6401,7 @@ namespace HRM.Api.Services
             TimKiem itemTimKiem = JsonConvert.DeserializeObject(dnm.ToString(), typeof(TimKiem)) as TimKiem;
             int nCurrentPage = itemTimKiem.CurrentPage ?? 1;
             int PageSize = itemTimKiem.PageSize ?? 20;
-            IEnumerable<HRM_dmThietLapBangLuong> result = from a in db.HRM_dmThietLapBangLuong
+            IQueryable<HRM_dmThietLapBangLuong> result = from a in db.HRM_dmThietLapBangLuong
                                                           orderby a.Created
                                                           select a;
 
@@ -6664,8 +6664,8 @@ namespace HRM.Api.Services
 
             var listDanhMuc = new List<HRM_dmLabelThietLapBangLuong>();
             string pathTemplate =PathUploads+ FileName;
-            Stream s = File.OpenRead(pathTemplate);
-            ExcelPackage package = new ExcelPackage(s);
+            using Stream s = File.OpenRead(pathTemplate);
+            using ExcelPackage package = new ExcelPackage(s);
             var sheet1 = package.Workbook.Worksheets["ICT"];
             for (int row = 3; row <= sheet1.Cells.End.Row; row++)
             {
@@ -6710,8 +6710,8 @@ namespace HRM.Api.Services
             var filenamegui = "DanhSachAnHienCot.xlsx";
             string sFileNameCopy =PathUploads+ filenamegui;
             File.Copy(sFileName, sFileNameCopy, true);
-            Stream s = File.OpenRead(sFileName);
-            ExcelPackage package = new ExcelPackage(s);
+            using Stream s = File.OpenRead(sFileName);
+            using ExcelPackage package = new ExcelPackage(s);
             ExcelWorksheet sheet1 = package.Workbook.Worksheets["ICT"];
             int row = 3;
             foreach (var dm in listDanhMuc)
@@ -6828,8 +6828,8 @@ namespace HRM.Api.Services
             try
             {
                 string sFileName = HrmOptions.PathUploads + FileName;
-                Stream s = File.OpenRead(sFileName);
-                ExcelPackage package = new ExcelPackage(s);
+                using Stream s = File.OpenRead(sFileName);
+                using ExcelPackage package = new ExcelPackage(s);
                 ExcelWorksheet sheet1 = package.Workbook.Worksheets["Danh mục địa chỉ"];
                 var listColumnName = new List<string>();
 
@@ -6901,7 +6901,7 @@ namespace HRM.Api.Services
             TimKiem itemTimKiem = JsonConvert.DeserializeObject(dnm.ToString(), typeof(TimKiem)) as TimKiem;
             int nCurrentPage = itemTimKiem.CurrentPage ?? 1;
             int PageSize = itemTimKiem.PageSize ?? 20;
-            IEnumerable<HRM_dmThietLapBaoCaoCongViec> result = from a in db.HRM_dmThietLapBaoCaoCongViec
+            IQueryable<HRM_dmThietLapBaoCaoCongViec> result = from a in db.HRM_dmThietLapBaoCaoCongViec
                                                                orderby a.Created
                                                                select a;
 

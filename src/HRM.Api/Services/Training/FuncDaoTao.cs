@@ -182,6 +182,7 @@ namespace HRM.Api.Services.DaoTao
         {
             MessageReturn err = new MessageReturn(DefineData.eErrorMessage.CapNhatThanhCong, "Cập nhật dữ liệu thành công");
             HRM_KeHoachDaoTao model = db.HRM_KeHoachDaoTao.Find(Id);
+            if (model == null) return null;
             model.NgayLapUnix = dungchung.DateTimeToUnixTimeStamp(model.NgayLap);
             var listChiTiet = db.HRM_KeHoachDaoTaoChiTiet.Where(r => r.IdKeHoach == Id).ToList();
             var listid = listChiTiet.Select(a => a.IdGuid).Distinct().ToList();
@@ -517,6 +518,7 @@ namespace HRM.Api.Services.DaoTao
         {
             MessageReturn err = new MessageReturn(DefineData.eErrorMessage.CapNhatThanhCong, "Cập nhật dữ liệu thành công");
             HRM_KeHoachDaoTaoTongHop model = db.HRM_KeHoachDaoTaoTongHop.Find(Id);
+            if (model == null) return null;
             model.NgayTongHopUnix = dungchung.DateTimeToUnixTimeStamp(model.NgayTongHop);
             var listChiTiet = db.HRM_TongHop_KeHoachDaoTaoChiTiet.Where(r => r.IdTongHop == Id).ToList();
             foreach (var item in listChiTiet)
@@ -871,25 +873,38 @@ namespace HRM.Api.Services.DaoTao
         {
             MessageReturn err = new MessageReturn(DefineData.eErrorMessage.CapNhatThanhCong, "Cập nhật dữ liệu thành công");
             HRM_Dot_DaoTao model = db.HRM_Dot_DaoTao.Find(Id);
+            if (model == null) return null;
             model.NgayTaoUnix = dungchung.DateTimeToUnixTimeStamp(model.NgayTao);
-            var listChiTiet = db.HRM_Dot_DaoTaoChiTiet.Where(r => r.IdDotDaoTao == Id).ToList();
+            var listChiTiet = db.HRM_Dot_DaoTaoChiTiet.AsNoTracking().Where(r => r.IdDotDaoTao == Id).ToList();
             model.listFileDinhKem = FileUploadController.GetListFileDinhKem(db, model.IdGuid, nameof(HRM_Dot_DaoTao));
+            var chiTietIds = listChiTiet.Select(x => x.IdGuid).Where(x => !string.IsNullOrEmpty(x)).Distinct().ToList();
+            var keHoachChiTietIds = listChiTiet.Select(x => x.IdKeHoachDaoTaoChiTiet).Where(x => !string.IsNullOrEmpty(x)).Distinct().ToList();
+            var keHoachChiTietById = keHoachChiTietIds.Count > 0
+                ? db.HRM_TongHop_KeHoachDaoTaoChiTiet.AsNoTracking().Where(x => keHoachChiTietIds.Contains(x.IdGuid)).ToDictionary(x => x.IdGuid)
+                : new Dictionary<string, HRM_TongHop_KeHoachDaoTaoChiTiet>();
+            var nhanVienByChiTiet = chiTietIds.Count > 0
+                ? db.HRM_Dot_DaoTaoNhanVien.AsNoTracking().Where(r => chiTietIds.Contains(r.IdChiTietDotDaoTao)).ToLookup(r => r.IdChiTietDotDaoTao)
+                : Enumerable.Empty<HRM_Dot_DaoTaoNhanVien>().ToLookup(r => r.IdChiTietDotDaoTao);
+            var noiDungByChiTiet = chiTietIds.Count > 0
+                ? db.HRM_Dot_DaoTao_NoiDung.AsNoTracking().Where(r => chiTietIds.Contains(r.IdChiTietDotDaoTao)).ToLookup(r => r.IdChiTietDotDaoTao)
+                : Enumerable.Empty<HRM_Dot_DaoTao_NoiDung>().ToLookup(r => r.IdChiTietDotDaoTao);
+            var fileByChiTiet = GetFileDinhKemByIds(db, "HRM_Dot_DaoTaoChiTiet", chiTietIds);
             foreach (var item in listChiTiet)
             {
                 if (!string.IsNullOrEmpty(item.IddmNoiDungDaoTao))
                     item.listIdNoiDung = item.IddmNoiDungDaoTao.Split(',').ToList();
                 item.NgayBatDauUnix = dungchung.DateTimeToUnixTimeStamp(item.NgayBatDau);
                 item.NgayKetThucUnix = dungchung.DateTimeToUnixTimeStamp(item.NgayKetThuc);
-                item.KeHoachTongHopDaoTaoChiTiet = db.HRM_TongHop_KeHoachDaoTaoChiTiet.Find(item.IdKeHoachDaoTaoChiTiet);
-                item.listNhanVien = db.HRM_Dot_DaoTaoNhanVien.Where(r => r.IdChiTietDotDaoTao == item.IdGuid).ToList();
-                item.listNoiDungChung = db.HRM_Dot_DaoTao_NoiDung.Where(r => r.IdChiTietDotDaoTao == item.IdGuid).ToList();
+                item.KeHoachTongHopDaoTaoChiTiet = !string.IsNullOrEmpty(item.IdKeHoachDaoTaoChiTiet) && keHoachChiTietById.TryGetValue(item.IdKeHoachDaoTaoChiTiet, out var khct) ? khct : null;
+                item.listNhanVien = nhanVienByChiTiet[item.IdGuid].ToList();
+                item.listNoiDungChung = noiDungByChiTiet[item.IdGuid].ToList();
                 if (item.listNoiDungChung != null && item.listNoiDungChung.Count > 0)
                 {
                     foreach (var itemNd in item.listNoiDungChung)
                         if (itemNd.NgayDaoTao != null)
                             itemNd.NgayDaoTaoUnix = dungchung.DateTimeToUnixTimeStamp(itemNd.NgayDaoTao);
                 }
-                item.listFileDinhKem = GetListFileDinhKem(db, "HRM_Dot_DaoTaoChiTiet", item.IdGuid);
+                item.listFileDinhKem = fileByChiTiet[item.IdGuid].ToList();
             }
             List<HRM_Dot_DaoTaoChiPhi> listData = db.HRM_Dot_DaoTaoChiPhi.Where(a => a.IdChiTietDotDaoTao == Id).OrderBy(a => a.Created).ToList();
             if (listData != null)
@@ -1423,7 +1438,7 @@ namespace HRM.Api.Services.DaoTao
                 int nCurrentPage = TimKiem.CurrentPage ?? 0;
                 int nTabTrangThai = TimKiem.TabTrangThai ?? 0;
                 int PageSize = TimKiem.PageSize ?? 25;
-                IEnumerable<HRM_ChuongTrinhDaoTao> result;
+                IQueryable<HRM_ChuongTrinhDaoTao> result;
                 if (TimKiem.TabTrangThai != 3)
                     result = from a in db.HRM_ChuongTrinhDaoTao
                              join b in db.HRM_QuyTrinhXuLy on a.IdGuid equals b.IdTable
@@ -1438,7 +1453,7 @@ namespace HRM.Api.Services.DaoTao
                              select a;
                 var itemList = result.Distinct().ToList();
                 int nSum = itemList.Count;
-                int nTotalPage = nSum / nCurrentPage;
+                int nTotalPage = CalculateTotalPages(nSum, PageSize);
                 PagingInfor paging = new PagingInfor(nCurrentPage, nSum, nTotalPage);
                 var listIdKeHoach = itemList.Select(r => r.IdKeHoachDaoTao).ToList();
                 var listKeHoach = db.HRM_KeHoachDaoTao.Where(r => listIdKeHoach.Contains(r.IdGuid)).ToList();
@@ -1583,6 +1598,7 @@ namespace HRM.Api.Services.DaoTao
         {
             MessageReturn err = new MessageReturn(DefineData.eErrorMessage.CapNhatThanhCong, "Cập nhật dữ liệu thành công");
             HRM_ChuongTrinhDaoTao model = db.HRM_ChuongTrinhDaoTao.Find(Id);
+            if (model == null) return null;
             model.listFileDinhKem = FileUploadController.GetListFileDinhKem(db, model.IdGuid, "HRM_ChuongTrinhDaoTao");
             model.TuNgayUnix = dungchung.DateTimeToUnixTimeStamp(model.TuNgay);
             model.DenNgayUnix = dungchung.DateTimeToUnixTimeStamp(model.DenNgay);
@@ -2175,18 +2191,14 @@ namespace HRM.Api.Services.DaoTao
             TimKiem itemTimKiem = JsonConvert.DeserializeObject(dnm.ToString(), typeof(TimKiem)) as TimKiem;
             int nCurrentPage = itemTimKiem.CurrentPage ?? 0;
             int PageSize = itemTimKiem.PageSize ?? 20;
-            IEnumerable<HRM_DotThi> result = from a in db.HRM_DotThi
+            IQueryable<HRM_DotThi> result = from a in db.HRM_DotThi
                                              where (string.IsNullOrEmpty(itemTimKiem.KeyWord) || ((a.NoiDung.ToUpper().Contains(itemTimKiem.KeyWord.Trim().ToUpper()))))
                                              orderby a.Ngay descending
                                              select a;
 
             if (nCurrentPage == 0)
                 return result.ToList();
-            var listItem = result.ToList();
-            int nSum = listItem.Count;
-            int nTotalPage = nSum / nCurrentPage;
-            PagingInfor paging = new PagingInfor(nCurrentPage, nSum, nTotalPage);
-            listItem = listItem.Skip(PageSize * (nCurrentPage - 1)).Take(PageSize).ToList();
+            var listItem = Paginate(result.AsNoTracking(), nCurrentPage, PageSize, out PagingInfor paging);
             foreach (var item in listItem)
             {
                 if (item.TrangThai == DefineData.eTrangThaiDotThi.ChuaThi.ToString())
@@ -2821,18 +2833,14 @@ namespace HRM.Api.Services.DaoTao
             TimKiem itemTimKiem = JsonConvert.DeserializeObject(dnm.ToString(), typeof(TimKiem)) as TimKiem;
             int nCurrentPage = itemTimKiem.CurrentPage ?? 0;
             int PageSize = itemTimKiem.PageSize ?? 20;
-            IEnumerable<HRM_KhaoSatDaoTao> result = from a in db.HRM_KhaoSatDaoTao
+            IQueryable<HRM_KhaoSatDaoTao> result = from a in db.HRM_KhaoSatDaoTao
                                                     where (string.IsNullOrEmpty(itemTimKiem.KeyWord) || ((a.NoiDung.ToUpper().Contains(itemTimKiem.KeyWord.Trim().ToUpper()))))
                                                     orderby a.Modified descending
                                                     select a;
 
             if (nCurrentPage == 0)
                 return result.ToList();
-            var listItem = result.ToList();
-            int nSum = listItem.Count;
-            int nTotalPage = nSum / nCurrentPage;
-            PagingInfor paging = new PagingInfor(nCurrentPage, nSum, nTotalPage);
-            listItem = listItem.Skip(PageSize * (nCurrentPage - 1)).Take(PageSize).ToList();
+            var listItem = Paginate(result.AsNoTracking(), nCurrentPage, PageSize, out PagingInfor paging);
             var listDuAn = _CallWebService.GetDanhSachDuAn(db);
             var listBoPhan = _CallWebService.GetDanhSachBoPhan(db);
             foreach (var item in listItem)

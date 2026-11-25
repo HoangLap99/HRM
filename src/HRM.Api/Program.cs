@@ -1,10 +1,21 @@
 using HRM.Api;
 using HRM.Api.Filters;
 using HRM.Api.Middleware;
+using Microsoft.AspNetCore.ResponseCompression;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
+using System.IO.Compression;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddResponseCompression(options =>
+{
+    options.EnableForHttps = true;
+    options.Providers.Add<BrotliCompressionProvider>();
+    options.Providers.Add<GzipCompressionProvider>();
+});
+builder.Services.Configure<BrotliCompressionProviderOptions>(options => options.Level = CompressionLevel.Fastest);
+builder.Services.Configure<GzipCompressionProviderOptions>(options => options.Level = CompressionLevel.Fastest);
 
 builder.Services.AddScoped<RequireSmartEosUserFilter>();
 
@@ -46,6 +57,7 @@ HostingEnvironmentCompat.Configure(
     builder.Configuration["HrmSettings:PathUploadsGoc"] ?? builder.Configuration["HrmSettings:PathUploads"]);
 
 app.UseMiddleware<GlobalExceptionHandlingMiddleware>();
+app.UseResponseCompression();
 
 if (app.Environment.IsDevelopment())
 {

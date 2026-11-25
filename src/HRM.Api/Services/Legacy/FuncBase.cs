@@ -196,6 +196,12 @@ public partial class FuncBase : dungchung
                select dm;
     }
 
+    protected static int CalculateTotalPages(int totalItems, int pageSize)
+    {
+        int effectivePageSize = pageSize > 0 ? pageSize : 25;
+        return (int)Math.Ceiling((double)totalItems / effectivePageSize);
+    }
+
     protected static List<T> Paginate<T>(
         IQueryable<T> query,
         int currentPage,
@@ -204,7 +210,7 @@ public partial class FuncBase : dungchung
     {
         int effectivePageSize = pageSize > 0 ? pageSize : 25;
         int totalItem = query.Count();
-        int totalPage = (int)Math.Ceiling((double)totalItem / effectivePageSize);
+        int totalPage = CalculateTotalPages(totalItem, effectivePageSize);
         paging = new PagingInfor(currentPage, totalItem, totalPage);
 
         int skip = currentPage > 1 ? (currentPage - 1) * effectivePageSize : 0;
@@ -292,16 +298,40 @@ public partial class FuncBase : dungchung
 
     public dynamic GetListFileDinhKem(ApplicationDbContext db, string TableName, string IdTable)
     {
-        var tepDinhKems = db.HRM_FileDinhKem.Where(x => x.TableName == TableName && x.idItem == IdTable).ToList();
+        var tepDinhKems = db.HRM_FileDinhKem.AsNoTracking()
+            .Where(x => x.TableName == TableName && x.idItem == IdTable)
+            .ToList();
+        PopulateFileDinhKemLinks(tepDinhKems);
+        return tepDinhKems;
+    }
+
+    protected static ILookup<string, HRM_FileDinhKem> GetFileDinhKemByIds(
+        ApplicationDbContext db,
+        string tableName,
+        IEnumerable<string> itemIds)
+    {
+        var ids = itemIds.Where(id => !string.IsNullOrEmpty(id)).Distinct().ToList();
+        if (ids.Count == 0)
+            return Enumerable.Empty<HRM_FileDinhKem>().ToLookup(x => x.idItem);
+
+        var files = db.HRM_FileDinhKem.AsNoTracking()
+            .Where(x => x.TableName == tableName && ids.Contains(x.idItem))
+            .ToList();
+        PopulateFileDinhKemLinks(files);
+        return files.ToLookup(x => x.idItem);
+    }
+
+    private static void PopulateFileDinhKemLinks(List<HRM_FileDinhKem> tepDinhKems)
+    {
+        string uploadRoot = HostingEnvironmentCompat.MapPath("/uploaded/");
         foreach (var item in tepDinhKems)
         {
-            string sFileName = HostingEnvironmentCompat.MapPath("/uploaded/") + item.FileNameGUI;
             if (item.FileNameGUI != null)
             {
+                string sFileName = uploadRoot + item.FileNameGUI;
                 item.Link = "/uploader/api/hdfiles?filename=" + Base64Encode(item.FileName) + "&path=" + Base64Encode(sFileName);
             }
         }
-        return tepDinhKems;
     }
 
     private static bool ApplyWorkflowResult(MessageReturn result, MessageReturn err)
