@@ -2063,13 +2063,21 @@ namespace HRM.Api.Services
                     SoPhutDuocVeSom = 0;
                 }
                 var listBoPhan = _CallWebService.GetDanhSachBoPhan(db);
+                var attCtx = new HRM.Api.Services.Attendance.AttendanceLookupContext(
+                    listLichLamViec, listCheckInOut, listXinNghiPhep, listDiMuonVeSom, listCaLamViecs, listBoPhan, ChucVus);
+                var userDuAnByUserId = listUserDuAn?
+                    .Where(a => !string.IsNullOrEmpty(a.IdUser))
+                    .GroupBy(a => a.IdUser)
+                    .ToDictionary(g => g.Key, g => g.First())
+                    ?? new Dictionary<string, Link_DanhSachDuAn_NhanSu>();
                 foreach (var item in listNhanVien)
                 {
                     if (item.MaNhanVien == "0156")
                         item.MaNhanVien = "0156";
-                    var BoPhan = listBoPhan.FirstOrDefault(a => a.Id == item.IdBoPhanEOS);
-                    var ChucVu = ChucVus.FirstOrDefault(a => a.Id == item.IdChucVu);
-                    var NhanSuDA = listUserDuAn.FirstOrDefault(a => a.IdUser == item.IdUser);
+                    attCtx.BoPhanById.TryGetValue(item.IdBoPhanEOS, out var BoPhan);
+                    attCtx.ChucVuById.TryGetValue(item.IdChucVu, out var ChucVu);
+                    var NhanSuDA = !string.IsNullOrEmpty(item.IdUser) && userDuAnByUserId.TryGetValue(item.IdUser, out var nsda) ? nsda : null;
+                    var lichOfEmp = attCtx.LichLamViecByEmp[item.IdGuid].ToList();
                     DateTime dt = dTuNgay;
                     if (listHeSo != null && listHeSo.Count > 0)
                     {
@@ -2078,12 +2086,10 @@ namespace HRM.Api.Services
                             HRM_BangChamCongNhanVien_TangCa hesoAdd = new HRM_BangChamCongNhanVien_TangCa();
                             hesoAdd.HeSo = heso;
                             hesoAdd.IdNhanVien = item.IdGuid;
-                            var tangca = listLichLamViec.Where(a => a.IdNhanVien == item.IdGuid && a.HeSoTangCa == heso && a.Loai == 1).ToList();
-                            if (tangca != null && tangca.Count > 0)
+                            var tangcaFirst = lichOfEmp.FirstOrDefault(a => a.HeSoTangCa == heso && a.Loai == 1);
+                            if (tangcaFirst != null)
                             {
-                                //hesoAdd.TongSoGio = tangca.Sum(a => (a.GioRa - a.GioVao).TotalHours);
-                                //hesoAdd.Cong = tangca.Sum(a => ((a.GioRa - a.GioVao).TotalHours) / (a.GioTieuChuan == 0 ? 8 : a.GioTieuChuan));
-                                hesoAdd.IddmHeSoTangCa = tangca.FirstOrDefault().IddmHeSoTangCa;
+                                hesoAdd.IddmHeSoTangCa = tangcaFirst.IddmHeSoTangCa;
                             }
                             listDataTangCa.Add(hesoAdd);
                         }
@@ -2093,17 +2099,12 @@ namespace HRM.Api.Services
                         foreach (var Id in listCaTieuChuan)
                         {
                             HRM_BangChamCongNhanVien_SoGioLamViec hesoAdd = new HRM_BangChamCongNhanVien_SoGioLamViec();
-                            var caLamViec = new HRM_dmLichLamViec();
-                            try
-                            {
-                                string idCalamViec = listLichLamViec.FirstOrDefault(a => a.GioTieuChuan == Id && a.IdNhanVien == item.IdGuid && !string.IsNullOrEmpty(a.IddmCaLamViec)).IddmCaLamViec;
-                                caLamViec = listCaLamViecs.FirstOrDefault(a => a.IdGuid == idCalamViec);
-
-                            }
-                            catch
-                            {
-                                caLamViec = listCaLamViecs.FirstOrDefault(a => a.SoGioTrongNgay == Id);
-                            }
+                            string idCalamViec = lichOfEmp.FirstOrDefault(a => a.GioTieuChuan == Id && !string.IsNullOrEmpty(a.IddmCaLamViec))?.IddmCaLamViec;
+                            HRM_dmLichLamViec caLamViec = null;
+                            if (!string.IsNullOrEmpty(idCalamViec))
+                                attCtx.CaLamViecById.TryGetValue(idCalamViec, out caLamViec);
+                            else
+                                attCtx.CaLamViecBySoGio.TryGetValue(Id, out caLamViec);
                             if (caLamViec != null)
                             {
                                 hesoAdd.IddmCaLamViec = caLamViec.IdGuid;
@@ -2118,26 +2119,23 @@ namespace HRM.Api.Services
 
                     while (dt <= dDenNgay)
                     {
-                        List<HRM_ThoiGianLamViecKeHoach> listLichLamViecFind = listLichLamViec.Where(x => x.IdNhanVien == item.IdGuid && x.Ngay == dt).OrderBy(a => a.GioVao).ToList();
-                        DateTime? Check = null;
-                        if (listLichLamViecFind != null)
-                            Check = listLichLamViecFind.OrderByDescending(a => a.Ngay).Select(a => a.GioRa).FirstOrDefault();
-                        if (Check != null)
-                            Check = Check.Value.Date;
-                        List<HRM_TheoDoiXinNghiPhep> NghiPheps = listXinNghiPhep.FindAll(x => x.IdNhanVien == item.IdGuid && x.NgayNghi == dt && x.IdCongTy == IdCongTy);
-                        List<HRM_CheckInOut> listCheckInOutFind = listCheckInOut.FindAll(x => x.IdNhanVien == item.IdGuid && (x.Ngay == dt || (Check != null && x.Ngay == Check))).OrderBy(a => a.Gio).ToList();
-                        List<HRM_TheoDoiDiMuonVeSom> listDiMuonVeSoms = listDiMuonVeSom.FindAll(x => x.IdNhanVien == item.IdGuid && x.NgayDangKy == dt);
                         if (dt >= dateNow)
                         {
                             dt = dDenNgay.AddDays(1);
                             continue;
                         }
+                        var dtDate = dt.Date;
+                        List<HRM_ThoiGianLamViecKeHoach> listLichLamViecFind = attCtx.LichLamViecByEmpDate[(item.IdGuid, dtDate)].OrderBy(a => a.GioVao).ToList();
+                        DateTime? Check = listLichLamViecFind.Count > 0
+                            ? listLichLamViecFind.OrderByDescending(a => a.Ngay).Select(a => a.GioRa).FirstOrDefault().Date
+                            : (DateTime?)null;
+                        List<HRM_TheoDoiXinNghiPhep> NghiPheps = attCtx.NghiPhepByEmpDate[(item.IdGuid, dtDate)].Where(x => x.IdCongTy == IdCongTy).ToList();
+                        List<HRM_CheckInOut> listCheckInOutFind = attCtx.GetCheckInOut(item.IdGuid, dtDate, Check);
+                        List<HRM_TheoDoiDiMuonVeSom> listDiMuonVeSoms = attCtx.DiMuonVeSomByEmpDate[(item.IdGuid, dtDate)].ToList();
                         if (listCheckInOutFind != null && listCheckInOutFind.Count > 1)
                         {
-                            if (listLichLamViecFind == null)
-                                listLichLamViecFind = new List<HRM_ThoiGianLamViecKeHoach>();
                             string IdCaLamViec = listLichLamViecFind.Where(a => a.IdCongTy == IdCongTy).Select(a => a.IddmCaLamViec).FirstOrDefault();
-                            var CaLamViec = listCaLamViecs.FirstOrDefault(a => a.IdGuid == IdCaLamViec);
+                            var CaLamViec = !string.IsNullOrEmpty(IdCaLamViec) && attCtx.CaLamViecById.TryGetValue(IdCaLamViec, out var clv) ? clv : null;
 
                             List<clsDiMuonVeSom> listSomMuon = funcKeHoach.TinhSomMuon(db, item.IdGuid, dmKyHieuChamCongs, listDiMuonVeSoms, listLichLamViecFind, listCheckInOutFind, dt, SoPhutDuocDiMuon, SoPhutDuocVeSom, DuAn.MaBoPhan, NghiPheps, false, IdCongTy, CaLamViec);
                             //List<HRM_KeHoachLamViecTuan_NhanVien_ThoiGian> listLichLamViecFindNV = listLichLamViecNV.FindAll(x => x.IdNhanVien == item.IdGuid && x.Ngay == dt);
@@ -2788,36 +2786,42 @@ namespace HRM.Api.Services
                     SoPhutDuocDiMuon = 0;
                     SoPhutDuocVeSom = 0;
                 }
+                var attCtxPht = new HRM.Api.Services.Attendance.AttendanceLookupContext(
+                    listLichLamViec, listCheckInOut, listXinNghiPhep, listDiMuonVeSom, listCaLamViecs, null, ChucVus);
+                var userDuAnByUserIdPht = listUserDuAn?
+                    .Where(a => !string.IsNullOrEmpty(a.IdUser))
+                    .GroupBy(a => a.IdUser)
+                    .ToDictionary(g => g.Key, g => g.First())
+                    ?? new Dictionary<string, Link_DanhSachDuAn_NhanSu>();
                 foreach (var item in listNhanVien)
                 {
                     if (item.MaNhanVien == "026304003878")
                         item.MaNhanVien = item.MaNhanVien;
-                    var ChucVu = ChucVus.FirstOrDefault(a => a.Id == item.IdChucVu);
-                    var NhanSuDA = listUserDuAn.FirstOrDefault(a => a.IdUser == item.IdUser);
+                    attCtxPht.ChucVuById.TryGetValue(item.IdChucVu, out var ChucVu);
+                    var NhanSuDA = !string.IsNullOrEmpty(item.IdUser) && userDuAnByUserIdPht.TryGetValue(item.IdUser, out var nsdaPht) ? nsdaPht : null;
                     DateTime dt = dTuNgay;
 
                     while (dt <= dDenNgay)
                     {
-                        List<HRM_ThoiGianLamViecKeHoach> listLichLamViecFind = listLichLamViec.FindAll(x => x.IdNhanVien == item.IdGuid && x.Ngay == dt);
-                        List<HRM_TheoDoiXinNghiPhep> NghiPheps = listXinNghiPhep.FindAll(x => x.IdNhanVien == item.IdGuid && x.NgayNghi == dt);
-                        DateTime Check = dt;
-                        if (listLichLamViecFind != null)
-                            Check = listLichLamViecFind.OrderByDescending(a => a.Ngay).Select(a => a.Ngay).FirstOrDefault();
-                        List<HRM_CheckInOut> listCheckInOutFind = listCheckInOut.FindAll(x => x.IdNhanVien == item.IdGuid && (x.Ngay == dt || x.Ngay == Check)).OrderBy(a => a.Gio).ToList();
-                        List<HRM_TheoDoiDiMuonVeSom> listDiMuonVeSoms = listDiMuonVeSom.FindAll(x => x.IdNhanVien == item.IdGuid && x.NgayDangKy == dt);
                         if (dt >= dateNow)
                         {
                             dt = dt.AddDays(1);
                             continue;
                         }
+                        var dtDate = dt.Date;
+                        List<HRM_ThoiGianLamViecKeHoach> listLichLamViecFind = attCtxPht.LichLamViecByEmpDate[(item.IdGuid, dtDate)].ToList();
+                        List<HRM_TheoDoiXinNghiPhep> NghiPheps = attCtxPht.NghiPhepByEmpDate[(item.IdGuid, dtDate)].ToList();
+                        DateTime? Check = listLichLamViecFind.Count > 0
+                            ? listLichLamViecFind.OrderByDescending(a => a.Ngay).Select(a => a.Ngay).FirstOrDefault().Date
+                            : (DateTime?)null;
+                        List<HRM_CheckInOut> listCheckInOutFind = attCtxPht.GetCheckInOut(item.IdGuid, dtDate, Check);
+                        List<HRM_TheoDoiDiMuonVeSom> listDiMuonVeSoms = attCtxPht.DiMuonVeSomByEmpDate[(item.IdGuid, dtDate)].ToList();
                         if (listCheckInOutFind != null && listCheckInOutFind.Count > 1)
                         {
-                            if (listLichLamViecFind == null)
-                                listLichLamViecFind = new List<HRM_ThoiGianLamViecKeHoach>();
                             string IdCaLamViec = listLichLamViecFind.Where(a => a.Loai == 0 && a.IdCongTy == IdCongTy && !string.IsNullOrEmpty(a.IddmCaLamViec)).Select(a => a.IddmCaLamViec).FirstOrDefault();
-                            var CaLamViec = listCaLamViecs.FirstOrDefault(a => a.IdGuid == IdCaLamViec);
-                            if (CaLamViec == null)
-                                CaLamViec = new HRM_dmLichLamViec { SoGioTrongNgay = 8, SoNgayCongTieuChuan = 26 };
+                            var CaLamViec = (!string.IsNullOrEmpty(IdCaLamViec) && attCtxPht.CaLamViecById.TryGetValue(IdCaLamViec, out var clvPht))
+                                ? clvPht
+                                : new HRM_dmLichLamViec { SoGioTrongNgay = 8, SoNgayCongTieuChuan = 26 };
                             List<clsDiMuonVeSom> listSomMuon = funcKeHoach.TinhSomMuon(db, item.IdGuid, dmKyHieuChamCongs, listDiMuonVeSoms, listLichLamViecFind, listCheckInOutFind, dt, SoPhutDuocDiMuon, SoPhutDuocVeSom, DuAn.MaBoPhan, NghiPheps, false, IdCongTy);
                             //List<HRM_KeHoachLamViecTuan_NhanVien_ThoiGian> listLichLamViecFindNV = listLichLamViecNV.FindAll(x => x.IdNhanVien == item.IdGuid && x.Ngay == dt);
                             if (listLichLamViecFind.Count >= 1)
@@ -4235,11 +4239,15 @@ namespace HRM.Api.Services
 
                 DateTime dateNow = DateTime.Now;
                 dateNow = new DateTime(dateNow.Year, dateNow.Month, dateNow.Day, 0, 0, 0);
+                var attCtxGs = new HRM.Api.Services.Attendance.AttendanceLookupContext(
+                    listLichLamViec, listCheckInOut, listXinNghiPhep, listDiMuonVeSom, listCaLamViecs);
+                var lichNvByEmpDateGs = listLichLamViecNV.ToLookup(x => (x.IdNhanVien, x.Ngay.Date));
                 foreach (var item in listNhanVien)
                 {
                     if (item.MaNhanVien == "0249")
                         item.MaNhanVien = "0249";
                     var NhanSuDA = listUserDuAn.FirstOrDefault(a => a.Id == item.IdUser);
+                    var lichOfEmpGs = attCtxGs.LichLamViecByEmp[item.IdGuid].ToList();
                     DateTime dt = dTuNgay;
                     if (listHeSo != null && listHeSo.Count > 0)
                     {
@@ -4248,14 +4256,12 @@ namespace HRM.Api.Services
                             HRM_BangChamCongNhanVien_TangCa hesoAdd = new HRM_BangChamCongNhanVien_TangCa();
                             hesoAdd.HeSo = heso;
                             hesoAdd.IdNhanVien = item.IdGuid;
-                            var tangca = listLichLamViec.Where(a => a.IdNhanVien == item.IdGuid && a.HeSoTangCa == heso && a.Loai == 1).ToList();
-                            if (tangca != null && tangca.Count > 0)
+                            var tangcaFirst = lichOfEmpGs.FirstOrDefault(a => a.HeSoTangCa == heso && a.Loai == 1);
+                            if (tangcaFirst != null)
                             {
                                 hesoAdd.TongSoGio = 0;
-                                //hesoAdd.TongSoGio = tangca.Sum(a => (a.GioRa - a.GioVao).TotalHours);
                                 hesoAdd.Cong = 0;
-                                //hesoAdd.Cong = tangca.Sum(a => ((a.GioRa - a.GioVao).TotalHours) / (a.GioTieuChuan == 0 ? 8 : a.GioTieuChuan));
-                                hesoAdd.IddmHeSoTangCa = tangca.FirstOrDefault().IddmHeSoTangCa;
+                                hesoAdd.IddmHeSoTangCa = tangcaFirst.IddmHeSoTangCa;
                             }
                             listDataTangCa.Add(hesoAdd);
                         }
@@ -4264,11 +4270,10 @@ namespace HRM.Api.Services
                     {
                         foreach (var Id in listCaTieuChuan)
                         {
-                            string IdCaLamViec = listLichLamViec.Where(a => a.IdNhanVien == item.IdGuid && a.GioTieuChuan == Id && !string.IsNullOrEmpty(a.IddmCaLamViec)).Select(a => a.IddmCaLamViec).FirstOrDefault();
+                            string IdCaLamViec = lichOfEmpGs.Where(a => a.GioTieuChuan == Id && !string.IsNullOrEmpty(a.IddmCaLamViec)).Select(a => a.IddmCaLamViec).FirstOrDefault();
 
                             HRM_BangChamCongNhanVien_SoGioLamViec hesoAdd = new HRM_BangChamCongNhanVien_SoGioLamViec();
-                            var caLamViec = listCaLamViecs.FirstOrDefault(a => a.IdGuid == IdCaLamViec);
-                            if (caLamViec != null)
+                            if (!string.IsNullOrEmpty(IdCaLamViec) && attCtxGs.CaLamViecById.TryGetValue(IdCaLamViec, out var caLamViec))
                             {
                                 hesoAdd.IddmCaLamViec = caLamViec.IdGuid;
                                 hesoAdd.IdNhanVien = item.IdGuid;
@@ -4282,33 +4287,29 @@ namespace HRM.Api.Services
 
                     while (dt <= dDenNgay)
                     {
-                        List<HRM_TheoDoiXinNghiPhep> NghiPheps = listXinNghiPhep.FindAll(x => x.IdNhanVien == item.IdGuid && x.NgayNghi == dt);
-                        List<HRM_TheoDoiDiMuonVeSom> listDiMuonVeSoms = listDiMuonVeSom.FindAll(x => x.IdNhanVien == item.IdGuid && x.NgayDangKy == dt);
                         if (dt >= dateNow)
                         {
                             dt = dt.AddDays(1);
                             continue;
                         }
+                        var dtDate = dt.Date;
+                        List<HRM_TheoDoiXinNghiPhep> NghiPheps = attCtxGs.NghiPhepByEmpDate[(item.IdGuid, dtDate)].ToList();
+                        List<HRM_TheoDoiDiMuonVeSom> listDiMuonVeSoms = attCtxGs.DiMuonVeSomByEmpDate[(item.IdGuid, dtDate)].ToList();
+                        var checkInOutDay = attCtxGs.CheckInOutByEmpDate[(item.IdGuid, dtDate)].OrderBy(a => a.Ngay).ToList();
+                        var lichDay = attCtxGs.LichLamViecByEmpDate[(item.IdGuid, dtDate)].ToList();
+                        var lichNvDay = lichNvByEmpDateGs[(item.IdGuid, dtDate)].ToList();
                         foreach (long IdCongTy in listIdCongTy)
                         {
-                            List<HRM_CheckInOut> listCheckInOutFind = listCheckInOut.FindAll(x => x.IdNhanVien == item.IdGuid && x.Ngay == dt /*&& x.IdCongTy == IdCongTy*/).OrderBy(a => a.Ngay).ToList();
-                            List<HRM_ThoiGianLamViecKeHoach> listLichLamViecFind = listLichLamViec.FindAll(x => x.IdNhanVien == item.IdGuid && x.Ngay == dt && x.IdCongTy == IdCongTy);
+                            List<HRM_CheckInOut> listCheckInOutFind = checkInOutDay;
+                            List<HRM_ThoiGianLamViecKeHoach> listLichLamViecFind = lichDay.Where(x => x.IdCongTy == IdCongTy).ToList();
 
                             if (listCheckInOutFind != null && listCheckInOutFind.Count > 1)
                             {
-                                //if (listCheckInOutFind.LastOrDefault().Loai == "I")
-                                //{
-                                //    DateTime dta = dt.AddDays(1);
-                                //    listCheckInOutFind.Add(listCheckInOut.FindAll(x => x.Loai == "O" && x.IdNhanVien == item.IdGuid && x.Ngay == dta).OrderBy(a => a.Ngay).FirstOrDefault());
-                                //}
-
-                                if (listLichLamViecFind == null)
-                                    continue;
                                 string IdCaLamViec = listLichLamViecFind.Where(a => a.IdCongTy == IdCongTy).Select(a => a.IddmCaLamViec).FirstOrDefault();
-                                var CaLamViec = listCaLamViecs.FirstOrDefault(a => a.IdGuid == IdCaLamViec);
+                                var CaLamViec = !string.IsNullOrEmpty(IdCaLamViec) && attCtxGs.CaLamViecById.TryGetValue(IdCaLamViec, out var clvGs) ? clvGs : null;
 
                                 List<clsDiMuonVeSom> listSomMuon = funcKeHoach.TinhSomMuon(db, item.IdGuid, dmKyHieuChamCongs, listDiMuonVeSoms, listLichLamViecFind, listCheckInOutFind, dt, SoPhutDuocDiMuon, SoPhutDuocVeSom, "", NghiPheps, false, IdCongTy);
-                                List<HRM_KeHoachLamViecTuan_NhanVien_ThoiGian> listLichLamViecFindNV = listLichLamViecNV.FindAll(x => x.IdNhanVien == item.IdGuid && x.Ngay == dt);
+                                List<HRM_KeHoachLamViecTuan_NhanVien_ThoiGian> listLichLamViecFindNV = lichNvDay;
                                 if (listLichLamViecFind.Count >= 1)
                                 {
                                     var itemAdd = new HRM_BangChamCong_NhanVien_ThoiGian();
@@ -7517,13 +7518,13 @@ namespace HRM.Api.Services
 
             HRM_QuyTrinhTinhLuong QuyTrinh = new HRM_QuyTrinhTinhLuong();
             List<HRM_QuyTrinhTinhLuong_NhanVien> listResult = new List<HRM_QuyTrinhTinhLuong_NhanVien>();
-            var BangChamCong = db.HRM_BangChamCong.Where(a => IdKyChamCong.Contains(a.IdGuid)).ToList();
+            var BangChamCong = db.HRM_BangChamCong.AsNoTracking().Where(a => IdKyChamCong.Contains(a.IdGuid)).ToList();
 
             DateTime NgayBD = BangChamCong.OrderBy(a => a.TuNgay).FirstOrDefault().TuNgay.Value;
             NgayBD = new DateTime(NgayBD.Year, NgayBD.Month, NgayBD.Day, 0, 0, 0);
             DateTime NgayKT = BangChamCong.OrderByDescending(a => a.DenNgay).FirstOrDefault().DenNgay.Value;
             NgayKT = new DateTime(NgayKT.Year, NgayKT.Month, NgayKT.Day, 0, 0, 0);
-            var listDataTG = db.HRM_BangChamCong_NhanVien_ThoiGian.Where(a => IdKyChamCong.Contains(a.IdBangChamCong)).ToList();
+            var listDataTG = db.HRM_BangChamCong_NhanVien_ThoiGian.AsNoTracking().Where(a => IdKyChamCong.Contains(a.IdBangChamCong)).ToList();
             var listData = (from a in db.HRM_BangChamCong_NhanVien
                             where IdKyChamCong.Contains(a.IdBangChamCong)
                             group a by new { a.IdNhanVien, a.IdCongTyEOS } into g
@@ -7535,13 +7536,13 @@ namespace HRM.Api.Services
             {
                 List<string> listIdNhanVien = listData.Select(x => x.IdNhanVien).Distinct().ToList();
                 IdKyChamCong = listData.Select(a => a.IdBangChamCong).Distinct().ToList();
-                var tangCas = db.HRM_BangChamCongNhanVien_TangCa.Where(a => IdKyChamCong.Contains(a.IdBangChamCong)).ToList();
-                var SoGioLamViecs = db.HRM_BangChamCongNhanVien_SoGioLamViec.Where(a => IdKyChamCong.Contains(a.IdBangChamCong)).ToList();
-                var SoGioLamViecKhongTrongKy = db.HRM_BangChamCongNhanVien_SoGioLamViec.Where(a => listIdNhanVien.Contains(a.IdNhanVien) && !IdKyChamCong.Contains(a.IdBangChamCong) && a.TuNgay >= NgayBD && a.DenNgay <= NgayKT).ToList();
+                var tangCas = db.HRM_BangChamCongNhanVien_TangCa.AsNoTracking().Where(a => IdKyChamCong.Contains(a.IdBangChamCong)).ToList();
+                var SoGioLamViecs = db.HRM_BangChamCongNhanVien_SoGioLamViec.AsNoTracking().Where(a => IdKyChamCong.Contains(a.IdBangChamCong)).ToList();
+                var SoGioLamViecKhongTrongKy = db.HRM_BangChamCongNhanVien_SoGioLamViec.AsNoTracking().Where(a => listIdNhanVien.Contains(a.IdNhanVien) && !IdKyChamCong.Contains(a.IdBangChamCong) && a.TuNgay >= NgayBD && a.DenNgay <= NgayKT).ToList();
 
                 var listUser = _CallWebService.GetListUserNhanSuDuAnTheoThoiGian(IdCongty, DateTimeToUnixTimeStamp(NgayBD), DateTimeToUnixTimeStamp(NgayKT), db);
 
-                var listThuong = db.HRM_QuyTrinh_PhucLoi_NhanVien.Where(a => listIdNhanVien.Contains(a.IdNhanVien) && a.isKetThuc == true && a.isTinhLuong == true && NgayBD <= a.Ngay && NgayKT >= a.Ngay).ToList();
+                var listThuong = db.HRM_QuyTrinh_PhucLoi_NhanVien.AsNoTracking().Where(a => listIdNhanVien.Contains(a.IdNhanVien) && a.isKetThuc == true && a.isTinhLuong == true && NgayBD <= a.Ngay && NgayKT >= a.Ngay).ToList();
                 //var listPhat = db.HRM_Luong_KhenThuongKyLuat.Where(a => a.Loai == 1 && listIdNhanVien.Contains(a.IdNhanVien) && a.IdCongTy == IdCongty && NgayBD <= a.KyLuongThucHien && NgayKT >= a.KyLuongThucHien).ToList();
                 List<HRM_NhanVien> listNhanVien = new List<HRM_NhanVien>();
                 //Giang sá»­a láº¥y nhÃ¢n viÃªn theo Bo pháº­n 14/04/2025
@@ -7594,13 +7595,13 @@ namespace HRM.Api.Services
                 var listHopDong = db.HRM_HopDong.Where(a => listIdNhanVien.Contains(a.IdNhanVien) && a.TrangThai == DefineData.eTrangTHaiHopDong.HieuLuc.ToString()).OrderByDescending(a => a.Created).ToList();
                 var listChucDanh = _CallWebService.GetDanhSachChucDanh(db);
                 var listChucVu = _CallWebService.GetDanhSachChucVu(db);
-                var caLamViecs = db.HRM_dmLichLamViec.ToList();
-                var LoaiHopDongs = db.HRM_dmLoaiHopDong.ToList();
+                var caLamViecs = db.HRM_dmLichLamViec.AsNoTracking().ToList();
+                var LoaiHopDongs = db.HRM_dmLoaiHopDong.AsNoTracking().ToList();
                 List<string> listIdHopDong = listHopDong.Select(a => a.IdGuid).Distinct().ToList();
-                var listBaoHiemNgoai = db.HRM_BaoHiem_HopDong.Where(a => listIdHopDong.Contains(a.IdHopDong) && a.isNgoai == true).ToList();
-                var listPhuCapdb = db.HRM_dmPhuCap.OrderBy(a => a.SapXep).ToList();
-                var listPhuCap = db.HRM_Luong_PhuCap_NhanVien.Where(a => listIdNhanVien.Contains(a.IdNhanVien) && a.NgayBatDauHieuLuc != null && a.NgayBatDauHieuLuc <= NgayBD && (a.NgayHetHieuLuc == null || (a.NgayHetHieuLuc.Value.Year != 1790 && a.NgayHetHieuLuc >= NgayKT))).OrderByDescending(a => a.Created).ToList();
-                var listLuong = db.HRM_Luong_NhanVien.Where(a => listIdNhanVien.Contains(a.IdNhanVien) && a.NgayBatDauHieuLuc <= NgayBD && (a.NgayHetHieuLuc == null || a.NgayHetHieuLuc >= NgayKT)).ToList();
+                var listBaoHiemNgoai = db.HRM_BaoHiem_HopDong.AsNoTracking().Where(a => listIdHopDong.Contains(a.IdHopDong) && a.isNgoai == true).ToList();
+                var listPhuCapdb = db.HRM_dmPhuCap.AsNoTracking().OrderBy(a => a.SapXep).ToList();
+                var listPhuCap = db.HRM_Luong_PhuCap_NhanVien.AsNoTracking().Where(a => listIdNhanVien.Contains(a.IdNhanVien) && a.NgayBatDauHieuLuc != null && a.NgayBatDauHieuLuc <= NgayBD && (a.NgayHetHieuLuc == null || (a.NgayHetHieuLuc.Value.Year != 1790 && a.NgayHetHieuLuc >= NgayKT))).OrderByDescending(a => a.Created).ToList();
+                var listLuong = db.HRM_Luong_NhanVien.AsNoTracking().Where(a => listIdNhanVien.Contains(a.IdNhanVien) && a.NgayBatDauHieuLuc <= NgayBD && (a.NgayHetHieuLuc == null || a.NgayHetHieuLuc >= NgayKT)).ToList();
                 List<HRM_ThoiGianLamViecKeHoach> listLichLamViec = db.HRM_ThoiGianLamViecKeHoach.AsNoTracking().Where(x => listIdNhanVien.Contains(x.IdNhanVien) && x.IdCongTy == IdCongty
                                                       && x.Ngay >= NgayBD && x.Ngay <= NgayKT).ToList();
                 var listId = listLuong.Select(a => a.IdNhanVien).Distinct().ToList();
@@ -7614,24 +7615,24 @@ namespace HRM.Api.Services
                     if (listLuongHetHan != null && listLuongHetHan.Count > 0)
                         listLuong.AddRange(listLuongHetHan);
                 }
-                var listNguoiThan = db.HRM_NhanVienQuanHeGiaDinh.Where(a => listIdNhanVien.Contains(a.IdNhanVien) && a.isLaNguoiPhuThuoc == true).ToList();
+                var listNguoiThan = db.HRM_NhanVienQuanHeGiaDinh.AsNoTracking().Where(a => listIdNhanVien.Contains(a.IdNhanVien) && a.isLaNguoiPhuThuoc == true).ToList();
                 var LoaiPheps = _CallWebService.GetListDanhMucHinhThucNghi(db).Where(a => a.Ma == DefineData.eKyHieuChamCong.PN.ToString() || a.Ma == DefineData.eKyHieuChamCong.NP.ToString() || a.Ma == DefineData.eKyHieuChamCong.N100.ToString() || a.Ma == DefineData.eKyHieuChamCong.N50.ToString() || a.Ma == DefineData.eKyHieuChamCong.NC.ToString() || a.Ma == DefineData.eKyHieuChamCong.NTL.ToString()).ToList();
                 List<string> IdLoaiPhep = LoaiPheps.Select(a => a.Id).ToList();
-                var listXinNghiPhep = db.HRM_TheoDoiXinNghiPhep.Where(a => listIdNhanVien.Contains(a.IdNhanVien) && a.NgayNghi >= NgayBD && a.NgayNghi <= NgayKT /*&& a.IdCongTy == IdCongty*/ && IdLoaiPhep.Contains(a.IdHinhThucNghi)).ToList();
+                var listXinNghiPhep = db.HRM_TheoDoiXinNghiPhep.AsNoTracking().Where(a => listIdNhanVien.Contains(a.IdNhanVien) && a.NgayNghi >= NgayBD && a.NgayNghi <= NgayKT /*&& a.IdCongTy == IdCongty*/ && IdLoaiPhep.Contains(a.IdHinhThucNghi)).ToList();
                 var listNgayLamViec = new List<HRM_TheoDoiLichLamViecNhanVien>();
-                var listCapPhatTaiSan = db.HRM_CapPhatThuHoiTaiSan_Item.Where(a => listIdNhanVien.Contains(a.IdNhanVien) && a.TinhLuong == true && ((a.NgayCapPhat != null && a.NgayCapPhat >= NgayBD && a.NgayCapPhat <= NgayKT) || (a.NgayThuHoi != null && a.NgayThuHoi >= NgayBD && a.NgayThuHoi <= NgayKT))).ToList();
-                var listTruyThu = db.HRM_QuyTrinhTinhLuong_TheoDoiLuongTruyThu.Where(a => listIdNhanVien.Contains(a.IdNhanVien)).ToList();
+                var listCapPhatTaiSan = db.HRM_CapPhatThuHoiTaiSan_Item.AsNoTracking().Where(a => listIdNhanVien.Contains(a.IdNhanVien) && a.TinhLuong == true && ((a.NgayCapPhat != null && a.NgayCapPhat >= NgayBD && a.NgayCapPhat <= NgayKT) || (a.NgayThuHoi != null && a.NgayThuHoi >= NgayBD && a.NgayThuHoi <= NgayKT))).ToList();
+                var listTruyThu = db.HRM_QuyTrinhTinhLuong_TheoDoiLuongTruyThu.AsNoTracking().Where(a => listIdNhanVien.Contains(a.IdNhanVien)).ToList();
                 //var /*listDanhGia*/ = db.HRM_QuyTrinhDanhGia_NhanVien.Where(a => a.isKetThuc == true && a.Thang == NgayKT.Month && a.Nam == NgayKT.Year && listIdNhanVien.Contains(a.IdNhanVien)).ToList();
-                //var listLichNghi = db.HRM_dmLichNghiLe_BoPhan.Where(a => listIdBoPhan.Contains(a.IdBoPhan)).ToList();
-                var listNoiCapBH = db.HRM_dmNoiCapBaoHiem.OrderBy(a => a.Created).ToList();
+                //var listLichNghi = db.HRM_dmLichNghiLe_BoPhan.AsNoTracking().Where(a => listIdBoPhan.Contains(a.IdBoPhan)).ToList();
+                var listNoiCapBH = db.HRM_dmNoiCapBaoHiem.AsNoTracking().OrderBy(a => a.Created).ToList();
                 //List<string> listIdLichNghi = listLichNghi.Select(a => a.IdLichNghiLe).Distinct().ToList();
-                var listLichNghiBP = db.HRM_dmLichNghiLe_BoPhan.Where(a => listIdBoPhan.Contains(a.IdBoPhan) && a.IdCongTy == IdCongty && (a.Nam == NgayBD.Year || a.Nam == NgayKT.Year)).ToList();
+                var listLichNghiBP = db.HRM_dmLichNghiLe_BoPhan.AsNoTracking().Where(a => listIdBoPhan.Contains(a.IdBoPhan) && a.IdCongTy == IdCongty && (a.Nam == NgayBD.Year || a.Nam == NgayKT.Year)).ToList();
                 List<string> listIdLichNghi = listLichNghiBP.Select(a => a.IdLichNghiLe).Distinct().ToList();
-                var listLichNghi = db.HRM_dmLichNghiLe.Where(a => listIdLichNghi.Contains(a.IdGuid) || (a.IdChucVu != null && listIdChucVu.Any(x => a.IdChucVu.Contains(x.ToString())))).OrderByDescending(a => a.Created).ToList();
+                var listLichNghi = db.HRM_dmLichNghiLe.AsNoTracking().Where(a => listIdLichNghi.Contains(a.IdGuid) || (a.IdChucVu != null && listIdChucVu.Any(x => a.IdChucVu.Contains(x.ToString())))).OrderByDescending(a => a.Created).ToList();
                 listIdLichNghi.AddRange(listLichNghi.Select(a => a.IdGuid).Distinct().ToList());
-                var listLichNghiChiTiet = db.HRM_dmLichNghiLe_Ngay.Where(a => listIdLichNghi.Contains(a.IdLichNghiLe)).ToList();
-                List<HRM_dmCauHinhThueThuNhapCaNhan> listCauHinh = db.HRM_dmCauHinhThueThuNhapCaNhan.OrderByDescending(a => a.STT).ToList();
-                var ListNganHang = db.HRM_dmNganHang.ToList();
+                var listLichNghiChiTiet = db.HRM_dmLichNghiLe_Ngay.AsNoTracking().Where(a => listIdLichNghi.Contains(a.IdLichNghiLe)).ToList();
+                List<HRM_dmCauHinhThueThuNhapCaNhan> listCauHinh = db.HRM_dmCauHinhThueThuNhapCaNhan.AsNoTracking().OrderByDescending(a => a.STT).ToList();
+                var ListNganHang = db.HRM_dmNganHang.AsNoTracking().ToList();
                 DateTime time = DateTime.Now;
                 time = new DateTime(time.Year, time.Month, time.Day, 0, 0, 0);
                 double TongT7 = Enumerable.Range(0, (NgayKT - NgayBD).Days + 1).Select(offset => NgayBD.AddDays(offset)).Count(date => date.DayOfWeek == DayOfWeek.Saturday);
@@ -8786,515 +8787,30 @@ namespace HRM.Api.Services
         }
         public HRM_QuyTrinhTinhLuong GetTinhLuongNhanVienTheoKyChamCongPHT(long IdCongty, List<long> IdBoPhan, List<string> IdKyChamCong, int LoaiLuong, ApplicationDbContext db)
         {
-
             HRM_QuyTrinhTinhLuong QuyTrinh = new HRM_QuyTrinhTinhLuong();
-            List<HRM_QuyTrinhTinhLuong_NhanVien> listResult = new List<HRM_QuyTrinhTinhLuong_NhanVien>();
-            var BangChamCong = db.HRM_BangChamCong.Where(a => IdKyChamCong.Contains(a.IdGuid)).ToList();
+            var BangChamCong = db.HRM_BangChamCong.AsNoTracking().Where(a => IdKyChamCong.Contains(a.IdGuid)).ToList();
+            if (BangChamCong.Count == 0) return QuyTrinh;
 
-            DateTime NgayBD = BangChamCong.OrderBy(a => a.TuNgay).FirstOrDefault().TuNgay.Value;
-            NgayBD = new DateTime(NgayBD.Year, NgayBD.Month, NgayBD.Day, 0, 0, 0);
-            DateTime NgayKT = BangChamCong.OrderByDescending(a => a.DenNgay).FirstOrDefault().DenNgay.Value;
-            NgayKT = new DateTime(NgayKT.Year, NgayKT.Month, NgayKT.Day, 0, 0, 0);
-            var listData = db.HRM_BangChamCong_NhanVien_ThoiGian.Where(a => IdKyChamCong.Contains(a.IdBangChamCong)).ToList();
+            DateTime NgayBD = BangChamCong.OrderBy(a => a.TuNgay).First().TuNgay.Value.Date;
+            DateTime NgayKT = BangChamCong.OrderByDescending(a => a.DenNgay).First().DenNgay.Value.Date;
+            var listDataQuery = db.HRM_BangChamCong_NhanVien_ThoiGian.AsNoTracking().Where(a => IdKyChamCong.Contains(a.IdBangChamCong));
             if (IdBoPhan != null && IdBoPhan.Count > 0)
-                listData = listData.Where(a => IdBoPhan.Contains(a.IdBoPhanEOS)).ToList();
-            if (listData != null && listData.Count > 0)
+                listDataQuery = listDataQuery.Where(a => IdBoPhan.Contains(a.IdBoPhanEOS));
+            var listData = listDataQuery.ToList();
+
+            if (listData.Count > 0)
             {
-                IdKyChamCong = listData.Select(a => a.IdBangChamCong).Distinct().ToList();
-                var tangCas = db.HRM_BangChamCongNhanVien_TangCa.Where(a => IdKyChamCong.Contains(a.IdBangChamCong)).ToList();
-                var SoGioLamViecs = db.HRM_BangChamCongNhanVien_SoGioLamViec.Where(a => IdKyChamCong.Contains(a.IdBangChamCong)).ToList();
-                List<string> listIdNhanVien = listData.Select(x => x.IdNhanVien).Distinct().ToList();
-                List<HRM_NhanVien> listNhanVien = new List<HRM_NhanVien>();
-                if (IdBoPhan.Count > 0)
-                    listNhanVien = db.HRM_NhanVien.Where(x => listIdNhanVien.Contains(x.IdGuid) && IdBoPhan.Contains(x.IdBoPhanEOS)).OrderBy(a => a.NgayBatDauLamViec).ThenBy(a => a.TenDayDu).ToList();
-                else
-                    listNhanVien = db.HRM_NhanVien.Where(x => listIdNhanVien.Contains(x.IdGuid)).OrderBy(a => a.NgayBatDauLamViec).ThenBy(a => a.TenDayDu).ToList();
-
-                List<long> listIdBoPhan = listNhanVien.Select(a => a.IdBoPhanEOS).Distinct().ToList();
-                List<long> listIdChucVu = listNhanVien.Select(a => a.IdChucVu).Distinct().ToList();
-                listIdBoPhan.AddRange(listNhanVien.Select(a => a.IdCongTyEOS).Distinct().ToList());
-                var listBoPhan = _CallWebService.GetDanhSachBoPhanFromListId(db, listIdBoPhan);
-                var listDuAn = _CallWebService.GetDanhSachDuAn(db);
-                var listHopDong = db.HRM_HopDong.Where(a => listIdNhanVien.Contains(a.IdNhanVien)).OrderByDescending(a => a.NgayHieuLuc).ToList();
-                var listChucDanh = _CallWebService.GetDanhSachChucDanh(db);
-                var listChucVu = _CallWebService.GetDanhSachChucVu(db);
-                var caLamViecs = db.HRM_dmLichLamViec.ToList();
-                var LoaiHopDongs = db.HRM_dmLoaiHopDong.ToList();
-                var parttime = LoaiHopDongs.FirstOrDefault(a => a.Ma == "HÄVV");
-                List<string> listIdHopDong = listHopDong.Select(a => a.IdGuid).Distinct().ToList();
-                var listPhuCapdb = db.HRM_dmPhuCap.OrderBy(a => a.SapXep).ToList();
-                var listPhuCap = db.HRM_Luong_PhuCap_NhanVien.Where(a => listIdNhanVien.Contains(a.IdNhanVien) && a.NgayBatDauHieuLuc <= NgayKT && (a.NgayHetHieuLuc == null || a.NgayHetHieuLuc >= NgayBD)).ToList();
-                var listLuong = db.HRM_Luong_NhanVien.Where(a => listIdNhanVien.Contains(a.IdNhanVien) && a.NgayBatDauHieuLuc <= NgayKT && (a.NgayHetHieuLuc == null || a.NgayHetHieuLuc >= NgayBD)).OrderByDescending(a => a.NgayBatDauHieuLuc).ToList();
-                var listId = listLuong.Select(a => a.IdNhanVien).Distinct().ToList();
-                listLuong.AddRange((from a in db.HRM_Luong_NhanVien
-                                    where listIdNhanVien.Contains(a.IdNhanVien) && !listId.Contains(a.IdNhanVien) && a.NgayHetHieuLuc != null && a.NgayHetHieuLuc.Value.Year > 2000 && a.NgayHetHieuLuc <= NgayBD
-                                    group a by a.IdNhanVien into g
-                                    select g.OrderByDescending(a => a.NgayBatDauHieuLuc).FirstOrDefault()).ToList());
-                var listNguoiThan = db.HRM_NhanVienQuanHeGiaDinh.Where(a => listIdNhanVien.Contains(a.IdNhanVien) && a.isLaNguoiPhuThuoc == true).ToList();
-                var LoaiPheps = _CallWebService.GetListDanhMucHinhThucNghi(db).Where(a => a.Ma == DefineData.eKyHieuChamCong.PN.ToString() || a.Ma == DefineData.eKyHieuChamCong.NP.ToString() || a.Ma == DefineData.eKyHieuChamCong.NC.ToString() || a.Ma == DefineData.eKyHieuChamCong.NTL.ToString()).ToList();
-                List<string> IdLoaiPhep = LoaiPheps.Select(a => a.Id).ToList();
-                var listXinNghiPhep = db.HRM_TheoDoiXinNghiPhep.Where(a => a.IdCongTy == IdCongty && listIdNhanVien.Contains(a.IdNhanVien) && a.NgayNghi >= NgayBD && a.NgayNghi <= NgayKT /*&& a.IdCongTy == IdCongty*/ && IdLoaiPhep.Contains(a.IdHinhThucNghi)).ToList();
-
-                //var listXinNghiPhep = db.HRM_TheoDoiXinNghiPhep.Where(a => listIdNhanVien.Contains(a.IdNhanVien) && a.NgayNghi >= NgayBD && a.NgayNghi <= NgayKT).ToList();
-                var listCapPhatTaiSan = db.HRM_CapPhatThuHoiTaiSan_Item.Where(a => listIdNhanVien.Contains(a.IdNhanVien) && a.TinhLuong == true && ((a.NgayCapPhat != null && a.NgayCapPhat >= NgayBD && a.NgayCapPhat <= NgayKT) || (a.NgayThuHoi != null && a.NgayThuHoi >= NgayBD && a.NgayThuHoi <= NgayKT))).ToList();
-                var listLichNghi = db.HRM_dmLichNghiLe_BoPhan.Where(a => listIdBoPhan.Contains(a.IdBoPhan) && a.IdCongTy == IdCongty && (a.Nam == NgayBD.Year || a.Nam == NgayKT.Year)).ToList();
-                List<string> listIdLichNghi = listLichNghi.Select(a => a.IdLichNghiLe).Distinct().ToList();
-                var listLichNghiChiTiet = db.HRM_dmLichNghiLe_Ngay.Where(a => listIdLichNghi.Contains(a.IdLichNghiLe) && a.TuNgay <= NgayKT && a.DenNgay >= NgayBD).ToList();
-                List<HRM_dmCauHinhThueThuNhapCaNhan> listCauHinh = db.HRM_dmCauHinhThueThuNhapCaNhan.OrderByDescending(a => a.STT).ToList();
-                List<HRM_ThoiGianLamViecKeHoach> listLichLamViec = db.HRM_ThoiGianLamViecKeHoach.AsNoTracking().Where(x => listIdNhanVien.Contains(x.IdNhanVien) && x.IdCongTy == IdCongty
-                                                                   && x.Ngay >= NgayBD && x.Ngay <= NgayKT).ToList();
-                var ListQT_BP = db.HRM_QuyTrinhBoPhan_BoPhan.Where(x => listIdNhanVien.Contains(x.IdQuyTrinh)).ToList();
-
-                Parallel.ForEach(listData, item => item.isNgayLe = false);
-                // tÃ­nh lÆ°Æ¡ng
-                foreach (var item in listNhanVien)
-                {
-                    if (item.MaNhanVien == "056304012695")
-                        item.MaNhanVien = "056304012695";
-                    List<HRM_QuyTrinhTinhLuong_NhanVien> listLuongCheck = new List<HRM_QuyTrinhTinhLuong_NhanVien>();
-                    var listdatas = listData.Where(a => a.IdNhanVien == item.IdGuid).ToList();
-
-                    var listLuongNV = listLuong.Where(a => a.IdNhanVien == item.IdGuid).OrderBy(a => a.NgayBatDauHieuLuc).ToList();
-                    if (listLuongNV != null && listLuongNV.Count > 0)
-                    {
-                        int STT = 1;
-                        bool isDaTinhBHXH = false;
-                        foreach (var Luong in listLuongNV)
-                        {
-                            HRM_QuyTrinhTinhLuong_NhanVien itemAdd = new HRM_QuyTrinhTinhLuong_NhanVien();
-                            //var Luong = listLuongNV.OrderByDescending(a => a.NgayBatDauHieuLuc).FirstOrDefault();
-                            itemAdd.LoaiLuong = Luong.LoaiLuong;
-
-                            itemAdd.LuongDongBHXH = Luong.LuongHachToan;
-                            itemAdd.LuongCoBan = Luong.Luong;
-                            itemAdd.NgayApDung = Luong.NgayBatDauHieuLuc;
-
-                            var datas = listdatas.Where(a => a.NgayChamCong >= Luong.NgayBatDauHieuLuc && (Luong.NgayHetHieuLuc == null || (Luong.NgayHetHieuLuc.Value.Year > 2000 && a.NgayChamCong <= Luong.NgayHetHieuLuc))).OrderBy(a => a.NgayChamCong).ToList();
-                            if (datas != null && datas.Count > 0)
-                            {
-
-                                itemAdd.listPhuCap = new List<HRM_QuyTrinhTinhLuong_PhuCap>();
-                                var HopDong = listHopDong.FirstOrDefault(a => a.IdNhanVien == item.IdGuid && a.IdGuid == Luong.IdNguonNhapLuong);
-                                itemAdd.PhuCapCongChinh = 0;
-                                itemAdd.PhuCapKhongTheoCongChinh = 0;
-                                if (HopDong != null)
-                                {
-                                    var loaiHopDong = LoaiHopDongs.FirstOrDefault(a => a.IdGuid == HopDong.IdLoaiHopDong);
-                                    if (loaiHopDong != null)
-                                    {
-                                        itemAdd.IdLoaiHopDong = HopDong.IdLoaiHopDong;
-                                        itemAdd.TenLoaiHopDong = loaiHopDong.Ten;
-                                    }
-                                    var CaLamViec = caLamViecs.FirstOrDefault(a => a.IdGuid == HopDong.IdThoiGianLamViec);
-                                    if (CaLamViec == null)
-                                    {
-                                        if (!string.IsNullOrEmpty(item.IdCaLamViec))
-                                            CaLamViec = caLamViecs.FirstOrDefault(a => item.IdCaLamViec.Contains(a.IdGuid));
-                                        if (CaLamViec == null)
-                                        {
-                                            string Id = listLichLamViec.Where(a => a.Loai == 0 && a.IdNhanVien == item.IdGuid && !string.IsNullOrEmpty(a.IddmCaLamViec) && a.Ngay >= Luong.NgayBatDauHieuLuc && (Luong.NgayHetHieuLuc == null || (Luong.NgayHetHieuLuc.Value.Year > 2000 && a.Ngay <= Luong.NgayHetHieuLuc))).Select(a => a.IddmCaLamViec).FirstOrDefault();
-                                            CaLamViec = caLamViecs.FirstOrDefault(a => a.IdGuid == Id);
-                                        }
-                                    }
-                                    if (CaLamViec == null)
-                                        CaLamViec = new HRM_dmLichLamViec() { SoGioTrongNgay = 8, SoNgayCongTieuChuan = 26 };
-
-                                    {
-                                        itemAdd.NgayCongTieuChuan = CaLamViec.SoNgayCongTieuChuan ?? 1;
-                                        itemAdd.CaLamViec = CaLamViec.Ten ?? "";
-                                        itemAdd.SoGioMotNgay = CaLamViec.SoGioTrongNgay ?? 0;
-
-                                    }
-                                }
-                                else
-                                {
-                                    var CaLamViec = new HRM_dmLichLamViec();
-
-                                    if (!string.IsNullOrEmpty(item.IdCaLamViec))
-                                        CaLamViec = caLamViecs.FirstOrDefault(a => item.IdCaLamViec.Contains(a.IdGuid));
-                                    else
-                                    {
-                                        string Id = listLichLamViec.Where(a => a.Loai == 0 && a.IdNhanVien == item.IdGuid && !string.IsNullOrEmpty(a.IddmCaLamViec)).Select(a => a.IddmCaLamViec).FirstOrDefault();
-                                        CaLamViec = caLamViecs.FirstOrDefault(a => a.IdGuid == Id);
-                                    }
-
-                                    if (CaLamViec == null)
-                                        CaLamViec = new HRM_dmLichLamViec() { SoGioTrongNgay = 8, SoNgayCongTieuChuan = 26 };
-
-                                    {
-                                        itemAdd.NgayCongTieuChuan = CaLamViec.SoNgayCongTieuChuan ?? 1;
-                                        itemAdd.CaLamViec = CaLamViec.Ten ?? "";
-                                        itemAdd.SoGioMotNgay = CaLamViec.SoGioTrongNgay ?? 0;
-
-                                    }
-                                }
-                                if (itemAdd.LoaiLuong == 3)
-                                {
-                                    itemAdd.SoGioMotNgay = 1;
-                                    itemAdd.NgayCongTieuChuan = 1;
-                                }
-
-                                // tÃ­nh Cong
-                                if (itemAdd.SoGioMotNgay > 0)
-                                {
-                                    double NgayCong = datas.Sum(a => (a.SoGioLamViec ?? 0));
-                                    double NgayCongCaGay = datas.Sum(a => (a.SoGioLamViecCaGay ?? 0));
-                                    itemAdd.NgayCong = datas.Sum(a => (a.SoGioLamViec ?? 0) / (a.SoGioTieuChuan ?? 8));
-                                    itemAdd.NgayCongCaGay = datas.Sum(a => (a.SoGioLamViecCaGay ?? 0) / (a.SoGioTieuChuan ?? 8));
-                                    itemAdd.NgayTangCa = datas.Sum(a => (a.SoGioLamViecTangCa ?? 0) / (a.SoGioTieuChuan ?? 8));
-                                    if (itemAdd.LoaiLuong == 3)
-                                    {
-                                        itemAdd.NgayCong = datas.Sum(a => (a.SoGioLamViec ?? 0));
-                                        itemAdd.NgayCongCaGay = datas.Sum(a => (a.SoGioLamViecCaGay ?? 0));
-                                        itemAdd.NgayTangCa = datas.Sum(a => (a.SoGioLamViecTangCa ?? 0));
-                                    }
-                                }
-                                itemAdd.IdNhanVien = item.IdGuid;
-                                itemAdd.TenNhanVien = item.TenDayDu;
-                                itemAdd.MaNhanVien = item.MaNhanVien;
-                                if (item.NgayNghiViec != null && item.NgayNghiViec.Value.ToString("dd/MM/yyyy") != "01/01/1970")
-                                    itemAdd.NgayNghiViec = item.NgayNghiViec.Value.ToString("dd/MM/yyyy");
-                                if (item.NgayBatDauLamViec != null && item.NgayBatDauLamViec.Value.ToString("dd/MM/yyyy") != "01/01/1970")
-                                    itemAdd.NgayVaoLam = item.NgayBatDauLamViec.Value.ToString("dd/MM/yyyy");
-                                var listIdCoSo = ListQT_BP.Where(a => a.IdQuyTrinh == item.IdGuid).Select(a => a.IdBoPhan).ToList();
-                                var CoSo = listDuAn.Where(a => listIdCoSo.Contains(a.Id)).Select(a => a.TenBoPhan).ToList();
-                                if (CoSo != null)
-                                    itemAdd.MaCoSo = string.Join(",", CoSo);
-                                var BoPhan = listBoPhan.FirstOrDefault(a => a.Id == item.IdBoPhanEOS);
-                                if (BoPhan != null)
-                                {
-                                    itemAdd.MaBoPhan = BoPhan.MaBoPhan;
-                                    itemAdd.TenBoPhan = BoPhan.TenBoPhan;
-                                }
-                                var ChucDanh = listChucDanh.FirstOrDefault(a => a.Id == item.IdChucDanh);
-                                if (ChucDanh != null)
-                                {
-                                    itemAdd.TenChucDanh = ChucDanh.Ten;
-                                }
-                                var ChucVu = listChucVu.FirstOrDefault(a => a.Id == item.IdChucVu);
-                                if (ChucVu != null)
-                                {
-                                    itemAdd.TenChucVu = ChucVu.TenChucVu;
-                                }
-
-                                // phá»¥ cáº¥p
-                                var PhuCaps = listPhuCap.Where(a => a.IdNhanVien == item.IdGuid && a.IdLuong_NhanVien == Luong.IdGuid).ToList();
-                                foreach (var phucap in listPhuCapdb)
-                                {
-                                    HRM_QuyTrinhTinhLuong_PhuCap itemPC = new HRM_QuyTrinhTinhLuong_PhuCap();
-                                    itemPC.IdNhanVien = item.IdGuid;
-                                    if (PhuCaps != null && PhuCaps.Count > 0)
-                                    {
-                                        var pc = PhuCaps.FirstOrDefault(a => a.IddmLoaiPhuCap == phucap.IdGuid);
-                                        if (pc != null)
-                                        {
-                                            double NgayCong = datas.Where(a => a.NgayChamCong >= pc.NgayBatDauHieuLuc).Sum(a => (a.SoGioLamViec ?? 0) / (a.SoGioTieuChuan ?? 8));
-                                            double NgayCongCaGay = datas.Where(a => a.NgayChamCong >= pc.NgayBatDauHieuLuc).Sum(a => (a.SoGioLamViecCaGay ?? 0) / (a.SoGioTieuChuan ?? 8));
-
-                                            if (itemAdd.LoaiLuong == 3)
-                                            {
-                                                NgayCong = datas.Where(a => a.NgayChamCong >= pc.NgayBatDauHieuLuc).Sum(a => (a.SoGioLamViec ?? 0));
-                                                NgayCongCaGay = datas.Where(a => a.NgayChamCong >= pc.NgayBatDauHieuLuc).Sum(a => (a.SoGioLamViecCaGay ?? 0));
-
-                                            }
-                                            double TongSoCong = NgayCong + NgayCongCaGay;
-                                            itemPC.Ma = phucap.Ma;
-                                            itemPC.IdLoaiThoiGian = pc.LoaiPhuCap;
-                                            itemPC.IddmPhuCap = pc.IddmLoaiPhuCap;
-                                            double PhuCap = 0;
-                                            itemPC.SoTienPhuCap = pc.SoTien;
-                                            if (itemAdd.NgayCongTieuChuan > 0)
-                                                PhuCap = (TongSoCong / itemAdd.NgayCongTieuChuan) * pc.SoTien;
-                                            if (phucap.Ma == "PCK-KCT") /// Ä‘á»‘i vá»›i phá»¥ cáº¥p khÃ´ng theo ca chÃ­nh
-                                                itemAdd.PhuCapKhongTheoCongChinh = itemAdd.PhuCapKhongTheoCongChinh + pc.SoTien;
-                                            else
-                                            if (phucap.Ma == "PC.CG" && pc.LoaiPhuCap != 5) /// Ä‘á»‘i vá»›i ca gÃ£y  nhÃ¢n viÃªn sale
-                                            {
-
-                                                PhuCap = ((NgayCongCaGay) / itemAdd.NgayCongTieuChuan) * pc.SoTien;
-                                                itemAdd.PhuCapCongChinh = itemAdd.PhuCapCongChinh + PhuCap;
-
-                                            }
-                                            else
-                                            if (pc.LoaiPhuCap == 5)
-                                            {
-                                                if (phucap.Ma == "PC.NN")  // phá»¥ cáº¥p ngoáº¡i ngá»¯
-                                                {
-                                                    if (TongSoCong >= 15)
-                                                    {
-                                                        PhuCap = pc.SoTien;
-                                                        itemAdd.PhuCapCongChinh = (itemAdd.PhuCapCongChinh) + PhuCap;
-                                                    }
-                                                    else
-                                                    {
-                                                        //PhuCap = (itemAdd.NgayCongCaGay / itemAdd.NgayCongTieuChuan) * pc.SoTien;
-                                                        itemAdd.PhuCapCongChinh = itemAdd.PhuCapCongChinh + PhuCap;
-                                                    }
-                                                }
-                                                else if (phucap.Ma == "PC.CG") // phá»¥ cáº¥p ca gÃ£y
-                                                {
-                                                    if (itemAdd.NgayCongCaGay >= 15)
-                                                    {
-                                                        PhuCap = pc.SoTien;
-                                                        itemAdd.PhuCapCongChinh = itemAdd.PhuCapCongChinh + PhuCap;
-                                                    }
-                                                    else
-                                                    {
-                                                        PhuCap = (NgayCongCaGay / itemAdd.NgayCongTieuChuan) * pc.SoTien;
-                                                        itemAdd.PhuCapCongChinh = itemAdd.PhuCapCongChinh + PhuCap;
-                                                    }
-                                                }
-
-                                            }
-                                            else
-                                            {
-                                                if (TongSoCong >= itemAdd.NgayCongTieuChuan || pc.LoaiPhuCap == 1)
-                                                    PhuCap = pc.SoTien;
-                                                itemAdd.PhuCapCongChinh = (itemAdd.PhuCapCongChinh) + PhuCap;
-                                            }
-
-                                        }
-                                    }
-                                    itemAdd.listPhuCap.Add(itemPC);
-                                }
-                                var NghiLe = listLichNghi.FirstOrDefault(a => a.IdBoPhan == item.IdBoPhanEOS);
-                                if (NghiLe != null)
-                                {
-                                    var NghiLeChiTiets = listLichNghiChiTiet.Where(a => a.IdLichNghiLe == NghiLe.IdLichNghiLe).Distinct().ToList();
-                                    if (NghiLeChiTiets != null && NghiLeChiTiets.Count > 0)
-                                    {
-                                        List<int> Ngays = new List<int>();
-                                        foreach (var ngay in NghiLeChiTiets)
-                                        {
-                                            DateTime time = ngay.TuNgay;
-                                            while (time <= ngay.DenNgay)
-                                            {
-                                                if (time >= NgayBD && time <= NgayKT)
-                                                    Ngays.Add(time.Day);
-                                                time = time.AddDays(1);
-                                            }
-                                        }
-
-                                        var data = datas.Where(a => (a.SoGioLamViec > 0 || a.SoGioLamViecCaGay > 0 || a.SoGioLamViecTangCa > 0) && Ngays.Contains(a.NgayChamCong.Value.Day)).ToList();
-                                        if (data != null && data.Count > 0)
-                                        {
-                                            itemAdd.Le_Tet = 0;
-                                            itemAdd.Le_TetKDL = 0;
-                                            itemAdd.LuongLe = 0;
-                                            itemAdd.LuongLeKDL = 0;
-                                            Ngays = data.Select(a => a.NgayChamCong.Value.Day).Distinct().ToList();
-                                            foreach (var ngay in NghiLeChiTiets)
-                                            {
-                                                if (ngay.TyLeLuong > 1)
-                                                {
-                                                    DateTime time = ngay.TuNgay;
-                                                    while (time <= ngay.DenNgay)
-                                                    {
-                                                        double NgayCong = (double)(Luong.Luong / itemAdd.NgayCongTieuChuan);
-                                                        if (Luong.LoaiLuong == 3)
-                                                            NgayCong = Luong.Luong;
-                                                        if (Ngays.Contains(time.Day))
-                                                        {
-
-
-                                                            var ngayC = data.FirstOrDefault(a => a.NgayChamCong.Value.Day == time.Day);
-                                                            double SoGLV = (ngayC.SoGioLamViec ?? 0) + (ngayC.SoGioLamViecCaGay ?? 0) + (ngayC.SoGioLamViecTangCa ?? 0);
-                                                            double TongCongN = SoGLV / (ngayC.SoGioTieuChuan ?? 8);
-                                                            double TyLe = ngay.TyLeLuong / 100;
-
-                                                            if (itemAdd.LoaiLuong == 3)
-                                                            {
-                                                                TyLe = 2;
-                                                                itemAdd.Le_Tet += SoGLV;
-                                                                itemAdd.LuongLe = itemAdd.LuongLe + SoGLV * itemAdd.LuongCoBan * TyLe;
-
-
-                                                            }
-                                                            else
-                                                            {
-
-                                                                itemAdd.Le_Tet += TongCongN;
-                                                                itemAdd.LuongLe = itemAdd.LuongLe + NgayCong * TongCongN * (TyLe);
-                                                                if (TongCongN < 1)
-                                                                {
-
-                                                                    itemAdd.Le_TetKDL += 1 - TongCongN;
-                                                                    itemAdd.LuongLeKDL = itemAdd.LuongLeKDL + NgayCong * (1 - TongCongN);
-
-                                                                }
-                                                            }
-                                                            itemAdd.NgayCong = itemAdd.NgayCong - (ngayC.SoGioLamViec ?? 0) / (ngayC.SoGioTieuChuan ?? 8);
-                                                            itemAdd.NgayCongCaGay = itemAdd.NgayCongCaGay - (ngayC.SoGioLamViecCaGay ?? 0) / (ngayC.SoGioTieuChuan ?? 8);
-
-                                                            itemAdd.NgayTangCa = itemAdd.NgayTangCa - (ngayC.SoGioLamViecTangCa ?? 0) / (ngayC.SoGioTieuChuan ?? 8);
-                                                            ngayC.isNgayLe = true;
-                                                        }
-                                                        else
-                                                        {
-                                                            List<HRM_ThoiGianLamViecKeHoach> listLichLamViecFind = listLichLamViec.FindAll(x => x.IdNhanVien == item.IdGuid && Ngays.Contains(x.Ngay.Day));
-                                                            if (listLichLamViecFind != null && listLichLamViecFind.Count > 0)
-                                                            {
-                                                                if (itemAdd.LoaiLuong != 3)
-                                                                {
-
-                                                                    itemAdd.Le_TetKDL += 1;
-                                                                    itemAdd.LuongLeKDL = itemAdd.LuongLeKDL + NgayCong;
-                                                                }
-
-                                                            }
-                                                        }
-
-                                                        time = time.AddDays(1);
-                                                    }
-                                                }
-                                            }
-                                        }
-                                        else
-                                        {
-                                            List<HRM_ThoiGianLamViecKeHoach> listLichLamViecFind = listLichLamViec.FindAll(x => x.IdNhanVien == item.IdGuid && Ngays.Contains(x.Ngay.Day));
-                                            if (listLichLamViecFind != null && listLichLamViecFind.Count > 0)
-                                            {
-                                                var lNgays = listLichLamViecFind.Select(a => a.Ngay).Distinct().ToList();
-                                                foreach (var itemLV in lNgays)
-                                                {
-                                                    if (itemAdd.LoaiLuong != 3)
-                                                    {
-                                                        double NgayCong = (double)(Luong.Luong / itemAdd.NgayCongTieuChuan);
-                                                        itemAdd.Le_TetKDL += 1;
-                                                        itemAdd.LuongLeKDL = itemAdd.LuongLeKDL + NgayCong;
-                                                    }
-
-                                                }
-                                            }
-                                        }
-
-
-
-                                    }
-                                }
-                                // ngÃ y cÃ´ng vÃ  LÆ°Æ¡ng
-                                double Cong1Ngay = itemAdd.LuongCoBan / itemAdd.NgayCongTieuChuan;
-                                itemAdd.LuongTheoCong = 0;
-                                #region Old
-                                if (listXinNghiPhep != null && listXinNghiPhep.Count > 0)
-                                {
-                                    itemAdd.NghiPhep = listXinNghiPhep.Where(a => a.IdNhanVien == item.IdGuid && a.NgayNghi >= Luong.NgayBatDauHieuLuc && (Luong.NgayHetHieuLuc == null || (Luong.NgayHetHieuLuc.Value.Year > 2000 && a.NgayNghi <= Luong.NgayHetHieuLuc))).Sum(a => a.ThoiGianNghi);
-                                    itemAdd.LuongPhep = itemAdd.NghiPhep * Cong1Ngay;
-                                    if (itemAdd.LoaiLuong == 3)
-                                        itemAdd.LuongPhep = itemAdd.NghiPhep * itemAdd.SoGioMotNgay * itemAdd.LuongCoBan;
-
-                                }
-                                itemAdd.LuongTheoCong = (itemAdd.NgayCong + itemAdd.NgayCongCaGay) * Cong1Ngay;
-                                if (itemAdd.LoaiLuong == 3)
-                                    itemAdd.LuongTheoCong = (itemAdd.NgayCong + itemAdd.NgayCongCaGay) * itemAdd.LuongCoBan;
-
-                                itemAdd.LuongTangCa = itemAdd.NgayTangCa * Cong1Ngay;
-                                if (itemAdd.LoaiLuong == 3)
-                                    itemAdd.LuongTangCa = itemAdd.NgayTangCa * itemAdd.LuongCoBan;
-                                #endregion
-                                if (itemAdd.NgayTangCa < 0)
-                                    itemAdd.NgayTangCa = 0;
-                                if (itemAdd.LuongTangCa < 0)
-                                    itemAdd.LuongTangCa = 0;
-
-                                if (itemAdd.NgayCong < 0)
-                                    itemAdd.NgayCong = 0;
-                                if (itemAdd.NgayCongCaGay < 0)
-                                    itemAdd.NgayCongCaGay = 0;
-                                if (itemAdd.Le_TetKDL < 0.1)
-                                {
-                                    itemAdd.Le_TetKDL = 0;
-                                    itemAdd.LuongLeKDL = 0;
-                                }
-                                itemAdd.TongLuong = itemAdd.LuongTheoCong + itemAdd.LuongTangCa + itemAdd.LuongPhep + itemAdd.LuongNghiBu + itemAdd.LuongLe + itemAdd.LuongLeKDL + itemAdd.PhuCapCongChinh + itemAdd.PhuCapKhongTheoCongChinh;
-                                double TongCong = itemAdd.NgayCong + itemAdd.NgayCongCaGay + itemAdd.NghiPhep + itemAdd.Le_Tet + itemAdd.NghiBu + itemAdd.NgayTangCa;
-                                if (((item.ThangTruyThuBHXH != null && item.ThangTruyThuBHXH >= NgayBD && item.ThangTruyThuBHXH <= NgayBD) || (item.ThangTruyThuBHYT != null && item.ThangTruyThuBHYT >= NgayBD && item.ThangTruyThuBHYT <= NgayBD)))
-                                {
-                                    itemAdd.TruyThu = itemAdd.LuongDongBHXH * ((item.PhanTramTruyThuBHYT ?? 0) + (item.PhanTramTruyThuBHXH ?? 0)) / 100;
-                                }
-                                if (Luong.LuongHachToan > 0 && Luong.LoaiLuong == 1)
-                                {
-                                    if (isDaTinhBHXH == false)
-                                    {
-                                        DateTime TuNgay = listLuongNV.Where(a => a.LoaiLuong == 1 && a.LuongHachToan > 0).OrderBy(a => a.NgayBatDauHieuLuc).Select(a => a.NgayBatDauHieuLuc).FirstOrDefault();
-                                        DateTime? DenNgay = listLuongNV.Where(a => a.LoaiLuong == 1 && a.LuongHachToan > 0).OrderByDescending(a => a.NgayBatDauHieuLuc).Select(a => a.NgayHetHieuLuc).FirstOrDefault();
-
-                                        if (listdatas.Where(a => a.NgayChamCong >= TuNgay && (DenNgay == null || (DenNgay.Value.Year > 2000 && DenNgay >= a.NgayChamCong))).Sum(a => (a.SoGioLamViec ?? 0) + (a.SoGioLamViecCaGay ?? 0) + (a.SoGioLamViecTangCa ?? 0)) / (itemAdd.SoGioMotNgay == 1 ? 8 : itemAdd.SoGioMotNgay) > 14)
-                                        {
-                                            itemAdd.MucDongBaoHiemXaHoi = itemAdd.LuongDongBHXH;
-                                            itemAdd.SDLDBHXH = itemAdd.MucDongBaoHiemXaHoi * 17.5 / 100;
-                                            itemAdd.SDLDBHYT = itemAdd.MucDongBaoHiemXaHoi * 3 / 100;
-                                            itemAdd.SDLDBHTN = itemAdd.MucDongBaoHiemXaHoi * 1 / 100;
-                                            itemAdd.TongNguoiSDLD = itemAdd.SDLDBHXH + itemAdd.SDLDBHYT + itemAdd.SDLDBHTN;
-                                            itemAdd.NLDBHXH = itemAdd.MucDongBaoHiemXaHoi * 8 / 100;
-                                            itemAdd.NLDBHYT = itemAdd.MucDongBaoHiemXaHoi * 1.5 / 100;
-                                            itemAdd.NLDBHTN = itemAdd.MucDongBaoHiemXaHoi * 1 / 100;
-                                            itemAdd.TongNguoiNLD = itemAdd.NLDBHXH + itemAdd.NLDBHYT + itemAdd.NLDBHTN;
-                                        }
-                                        isDaTinhBHXH = true;
-                                    }
-                                }
-                                if (STT == listLuongNV.Count())
-                                {
-                                    listLuongCheck.Add(itemAdd);
-                                    // thuáº¿ thu nháº­p cÃ¡ nhÃ¢n
-                                    var QuanHes = listNguoiThan.Where(a => a.IdNhanVien == item.IdGuid).ToList();
-                                    itemAdd.SoGiamTruBanThan = 11000000;
-                                    itemAdd.SpNguoiDangKyNPT = QuanHes.Count;
-                                    itemAdd.TongTienGiamTruGiaCanh = itemAdd.SoGiamTruBanThan + itemAdd.SpNguoiDangKyNPT * 4400000;
-                                    itemAdd.ThuNhapMienThue = listLuongCheck.Sum(a => a.LuongLe + a.LuongLeKDL + +a.TongNguoiNLD);
-                                    if (listLuongCheck.Sum(a => a.TongLuong) - itemAdd.TongTienGiamTruGiaCanh - itemAdd.ThuNhapMienThue > 0)
-                                        itemAdd.ThuNhapTinhThueTNCN = listLuongCheck.Sum(a => a.TongLuong) - itemAdd.TongTienGiamTruGiaCanh - itemAdd.ThuNhapMienThue;
-                                    else
-                                        itemAdd.ThuNhapTinhThueTNCN = 0;
-                                    itemAdd.ThueTNCNTheoLuyTien = TinhThue(itemAdd.ThuNhapTinhThueTNCN, listCauHinh);
-                                    // cáº¥p phÃ¡t tÃ i sáº£n
-                                    if (listCapPhatTaiSan != null)
-                                    {
-                                        var listTaiSan = listCapPhatTaiSan.Where(a => a.IdNhanVien == item.IdGuid).ToList();
-                                        if (listTaiSan != null && listTaiSan.Count > 0)
-                                        {
-                                            var capPhat = listTaiSan.Where(a => a.Loai == 1).ToList();
-                                            if (capPhat != null && capPhat.Count > 0)
-                                                itemAdd.DongPhuc = capPhat.Sum(a => (a.SoLuongCapPhat ?? 0) * (a.GiaTriCapPhat ?? 0));
-                                            var ThuHoi = listTaiSan.Where(a => a.Loai == 1).ToList();
-                                            if (ThuHoi != null && ThuHoi.Count > 0)
-                                                itemAdd.TraTienDongPhuc = ThuHoi.Sum(a => (a.SoLuongThuHoi ?? 0) * (a.GiaTriThuHoi ?? 0));
-
-                                        }
-                                    }
-                                    itemAdd.KhauTruTaiNguon = 0;
-                                    itemAdd.isCamKet = item.isCamKet;
-                                    if (listLuongCheck.Sum(a => a.MucDongBaoHiemXaHoi) == 0 && item.isCamKet == false)
-                                        itemAdd.KhauTruTaiNguon = itemAdd.TongLuong * 0.1;
-                                    itemAdd.TongGiamThueTNCN = itemAdd.ThueTNCNTheoLuyTien + itemAdd.KhauTruTaiNguon;
-                                    if (itemAdd.TongGiamThueTNCN < 50000)
-                                        itemAdd.TongGiamThueTNCN = 0;
-                                }
-                                else
-                                    listLuongCheck.Add(itemAdd);
-                                STT++;
-                                itemAdd.TienThucNhan = itemAdd.TongLuong - itemAdd.ThueTNCNTheoLuyTien - itemAdd.TongNguoiNLD - (itemAdd.TongGiamThueTNCN ?? 0) - (itemAdd.TongGiamThueTNCN ?? 0);
-                                listResult.Add(itemAdd);
-                            }
-                        }
-                    }
-                }
-                QuyTrinh = GetListHeaderNew(QuyTrinh, listResult.FirstOrDefault().listTangCa, listResult.FirstOrDefault().listGioTieuChuan, IdCongty, db, IdBoPhan);
+                var batch = HRM.Api.Services.Payroll.PhtPayrollCalculator.Calculate(
+                    IdCongty, IdBoPhan, NgayBD, NgayKT, listData, db, _CallWebService, TinhThue);
+                var listResult = batch.SalaryLines;
+                var first = listResult.FirstOrDefault();
+                QuyTrinh = GetListHeaderNew(QuyTrinh, first?.listTangCa ?? new List<HRM_QuyTrinhTinhLuong_TangCa>(), first?.listGioTieuChuan ?? new List<HRM_QuyTrinhTinhLuong_SoGioLamViec>(), IdCongty, db, IdBoPhan);
                 QuyTrinh.listNhanVien = listResult.OrderBy(a => a.NgayVaoLam).ToList();
-                if (LoaiLuong == 0)
-                    QuyTrinh.listGiaTriNhanVien = GetListGiatriPHT(QuyTrinh.listHeader_Data, listResult, listNhanVien, listHopDong, db);
-                else
-                    QuyTrinh.listGiaTriNhanVien = GetListGiatriPHT(QuyTrinh.listHeader_Data, listResult.Where(a => a.LoaiLuong == LoaiLuong).ToList(), listNhanVien, listHopDong, db);
-            }
-            else
-            {
-                HRM_QuyTrinhTinhLuong_NhanVien Add = new HRM_QuyTrinhTinhLuong_NhanVien();
-                listResult.Add(Add);
+                var filtered = LoaiLuong == 0 ? listResult : listResult.Where(a => a.LoaiLuong == LoaiLuong).ToList();
+                QuyTrinh.listGiaTriNhanVien = GetListGiatriPHT(QuyTrinh.listHeader_Data, filtered, batch.Employees, batch.Contracts, db);
             }
             return QuyTrinh;
         }
-
         public dynamic GetTinhLuongNhanVienTheoChamCong(long IdCongTy, List<long> IdBoPhan, double TuNgayUnix, double DenNgayUnix, ApplicationDbContext db)
         {
             HRM_QuyTrinhTinhLuong QuyTrinh = new HRM_QuyTrinhTinhLuong();
@@ -9984,524 +9500,27 @@ namespace HRM.Api.Services
         }
         public HRM_QuyTrinhTinhLuong GetTinhLuongNhanVienTheoChamCongPHTNew(long IdCongTy, List<long> IdBoPhan, double TuNgayUnix, double DenNgayUnix, ApplicationDbContext db)
         {
-
             HRM_QuyTrinhTinhLuong QuyTrinh = new HRM_QuyTrinhTinhLuong();
-            List<HRM_QuyTrinhTinhLuong_NhanVien> listResult = new List<HRM_QuyTrinhTinhLuong_NhanVien>();
             DateTime NgayBD = dungchung.UnixTimeStampToDateTime(TuNgayUnix).Date;
             DateTime NgayKT = dungchung.UnixTimeStampToDateTime(DenNgayUnix).Date;
             var listnhanvien = GetChamCongFromMayChamCongPHT(IdCongTy, TuNgayUnix, DenNgayUnix, db);
             if (listnhanvien != null && listnhanvien.Count > 0)
             {
                 var listData = listnhanvien.SelectMany(a => a.listNgay).ToList();
-                List<string> listIdNhanVien = listData.Select(x => x.IdNhanVien).Distinct().ToList();
-                List<HRM_NhanVien> listNhanVien = new List<HRM_NhanVien>();
-
-                if (IdBoPhan.Count > 0)
-                    listNhanVien = db.HRM_NhanVien.Where(x => listIdNhanVien.Contains(x.IdGuid) && IdBoPhan.Contains(x.IdBoPhanEOS)).OrderBy(a => a.NgayBatDauLamViec).ThenBy(a => a.TenDayDu).ToList();
-                else
-                    listNhanVien = db.HRM_NhanVien.Where(x => listIdNhanVien.Contains(x.IdGuid)).OrderBy(a => a.NgayBatDauLamViec).ThenBy(a => a.TenDayDu).ToList();
-
-                List<long> listIdBoPhan = listNhanVien.Select(a => a.IdBoPhanEOS).Distinct().ToList();
-                List<long> listIdChucVu = listNhanVien.Select(a => a.IdChucVu).Distinct().ToList();
-                listIdBoPhan.AddRange(listNhanVien.Select(a => a.IdCongTyEOS).Distinct().ToList());
-                var listBoPhan = _CallWebService.GetDanhSachBoPhanFromListId(db, listIdBoPhan);
-                var listDuAn = _CallWebService.GetDanhSachDuAn(db);
-                var listHopDong = db.HRM_HopDong.Where(a => listIdNhanVien.Contains(a.IdNhanVien)).OrderByDescending(a => a.NgayHieuLuc).ToList();
-                var listChucDanh = _CallWebService.GetDanhSachChucDanh(db);
-                var listChucVu = _CallWebService.GetDanhSachChucVu(db);
-                var caLamViecs = db.HRM_dmLichLamViec.ToList();
-                var LoaiHopDongs = db.HRM_dmLoaiHopDong.ToList();
-                var parttime = LoaiHopDongs.FirstOrDefault(a => a.Ma == "HÄVV");
-                List<string> listIdHopDong = listHopDong.Select(a => a.IdGuid).Distinct().ToList();
-                var listPhuCapdb = db.HRM_dmPhuCap.OrderBy(a => a.SapXep).ToList();
-                var listPhuCap = db.HRM_Luong_PhuCap_NhanVien.Where(a => listIdNhanVien.Contains(a.IdNhanVien) && a.NgayBatDauHieuLuc <= NgayKT && (a.NgayHetHieuLuc == null || a.NgayHetHieuLuc >= NgayBD)).ToList();
-                var listLuong = db.HRM_Luong_NhanVien.Where(a => listIdNhanVien.Contains(a.IdNhanVien) && a.NgayBatDauHieuLuc <= NgayKT && (a.NgayHetHieuLuc == null || a.NgayHetHieuLuc >= NgayBD)).OrderByDescending(a => a.NgayBatDauHieuLuc).ToList();
-                var listId = listLuong.Select(a => a.IdNhanVien).Distinct().ToList();
-                listLuong.AddRange((from a in db.HRM_Luong_NhanVien
-                                    where listIdNhanVien.Contains(a.IdNhanVien) && !listId.Contains(a.IdNhanVien) && a.NgayHetHieuLuc != null && a.NgayHetHieuLuc.Value.Year > 2000 && a.NgayHetHieuLuc <= NgayBD
-                                    group a by a.IdNhanVien into g
-                                    select g.OrderByDescending(a => a.NgayBatDauHieuLuc).FirstOrDefault()).ToList());
-                var listNguoiThan = db.HRM_NhanVienQuanHeGiaDinh.Where(a => listIdNhanVien.Contains(a.IdNhanVien) && a.isLaNguoiPhuThuoc == true).ToList();
-                var LoaiPheps = _CallWebService.GetListDanhMucHinhThucNghi(db).Where(a => a.Ma == DefineData.eKyHieuChamCong.PN.ToString() || a.Ma == DefineData.eKyHieuChamCong.NP.ToString() || a.Ma == DefineData.eKyHieuChamCong.NC.ToString() || a.Ma == DefineData.eKyHieuChamCong.NTL.ToString()).ToList();
-                List<string> IdLoaiPhep = LoaiPheps.Select(a => a.Id).ToList();
-                var listXinNghiPhep = db.HRM_TheoDoiXinNghiPhep.Where(a => a.IdCongTy == IdCongTy && listIdNhanVien.Contains(a.IdNhanVien) && a.NgayNghi >= NgayBD && a.NgayNghi <= NgayKT /*&& a.IdCongTy == IdCongty*/ && IdLoaiPhep.Contains(a.IdHinhThucNghi)).ToList();
-
-                //var listXinNghiPhep = db.HRM_TheoDoiXinNghiPhep.Where(a => listIdNhanVien.Contains(a.IdNhanVien) && a.NgayNghi >= NgayBD && a.NgayNghi <= NgayKT).ToList();
-                var listCapPhatTaiSan = db.HRM_CapPhatThuHoiTaiSan_Item.Where(a => listIdNhanVien.Contains(a.IdNhanVien) && a.TinhLuong == true && ((a.NgayCapPhat != null && a.NgayCapPhat >= NgayBD && a.NgayCapPhat <= NgayKT) || (a.NgayThuHoi != null && a.NgayThuHoi >= NgayBD && a.NgayThuHoi <= NgayKT))).ToList();
-                var listLichNghi = db.HRM_dmLichNghiLe_BoPhan.Where(a => listIdBoPhan.Contains(a.IdBoPhan) && a.IdCongTy == IdCongTy && (a.Nam == NgayBD.Year || a.Nam == NgayKT.Year)).ToList();
-                List<string> listIdLichNghi = listLichNghi.Select(a => a.IdLichNghiLe).Distinct().ToList();
-                var listLichNghiChiTiet = db.HRM_dmLichNghiLe_Ngay.Where(a => listIdLichNghi.Contains(a.IdLichNghiLe) && a.TuNgay <= NgayKT && a.DenNgay >= NgayBD).ToList();
-                List<HRM_dmCauHinhThueThuNhapCaNhan> listCauHinh = db.HRM_dmCauHinhThueThuNhapCaNhan.OrderByDescending(a => a.STT).ToList();
-                List<HRM_ThoiGianLamViecKeHoach> listLichLamViec = db.HRM_ThoiGianLamViecKeHoach.AsNoTracking().Where(x => listIdNhanVien.Contains(x.IdNhanVien) && x.IdCongTy == IdCongTy
-                                                                   && x.Ngay >= NgayBD && x.Ngay <= NgayKT).ToList();
-                var ListQT_BP = db.HRM_QuyTrinhBoPhan_BoPhan.Where(x => listIdNhanVien.Contains(x.IdQuyTrinh)).ToList();
-
-                Parallel.ForEach(listData, item => item.isNgayLe = false);
-                // tÃ­nh lÆ°Æ¡ng
-                foreach (var item in listNhanVien)
-                {
-                    if (item.MaNhanVien == "001304028349")
-                        item.MaNhanVien = "001304028349";
-                    List<HRM_QuyTrinhTinhLuong_NhanVien> listLuongCheck = new List<HRM_QuyTrinhTinhLuong_NhanVien>();
-                    var listdatas = listData.Where(a => a.IdNhanVien == item.IdGuid).ToList();
-
-                    var listLuongNV = listLuong.Where(a => a.IdNhanVien == item.IdGuid).OrderBy(a => a.NgayBatDauHieuLuc).ToList();
-                    if (listLuongNV != null && listLuongNV.Count > 0)
-                    {
-                        int STT = 1;
-                        bool isDaTinhBHXH = false;
-                        foreach (var Luong in listLuongNV)
-                        {
-                            HRM_QuyTrinhTinhLuong_NhanVien itemAdd = new HRM_QuyTrinhTinhLuong_NhanVien();
-                            //var Luong = listLuongNV.OrderByDescending(a => a.NgayBatDauHieuLuc).FirstOrDefault();
-                            itemAdd.LoaiLuong = Luong.LoaiLuong;
-
-                            itemAdd.LuongDongBHXH = Luong.LuongHachToan;
-                            itemAdd.LuongCoBan = Luong.Luong;
-                            itemAdd.NgayApDung = Luong.NgayBatDauHieuLuc;
-
-                            var datas = listdatas.Where(a => a.NgayChamCong >= Luong.NgayBatDauHieuLuc && (Luong.NgayHetHieuLuc == null || (Luong.NgayHetHieuLuc.Value.Year > 2000 && a.NgayChamCong <= Luong.NgayHetHieuLuc))).OrderBy(a => a.NgayChamCong).ToList();
-                            if (datas != null && datas.Count > 0)
-                            {
-
-                                itemAdd.listPhuCap = new List<HRM_QuyTrinhTinhLuong_PhuCap>();
-                                var HopDong = listHopDong.FirstOrDefault(a => a.IdNhanVien == item.IdGuid && a.IdGuid == Luong.IdNguonNhapLuong);
-                                itemAdd.PhuCapCongChinh = 0;
-                                itemAdd.PhuCapKhongTheoCongChinh = 0;
-                                if (HopDong != null)
-                                {
-                                    var loaiHopDong = LoaiHopDongs.FirstOrDefault(a => a.IdGuid == HopDong.IdLoaiHopDong);
-                                    if (loaiHopDong != null)
-                                    {
-                                        itemAdd.IdLoaiHopDong = HopDong.IdLoaiHopDong;
-                                        itemAdd.TenLoaiHopDong = loaiHopDong.Ten;
-                                    }
-                                    var CaLamViec = caLamViecs.FirstOrDefault(a => a.IdGuid == HopDong.IdThoiGianLamViec);
-                                    if (CaLamViec == null)
-                                    {
-                                        if (!string.IsNullOrEmpty(item.IdCaLamViec))
-                                            CaLamViec = caLamViecs.FirstOrDefault(a => item.IdCaLamViec.Contains(a.IdGuid));
-                                        if (CaLamViec == null)
-                                        {
-                                            string Id = listLichLamViec.Where(a => a.Loai == 0 && a.IdNhanVien == item.IdGuid && !string.IsNullOrEmpty(a.IddmCaLamViec) && a.Ngay >= Luong.NgayBatDauHieuLuc && (Luong.NgayHetHieuLuc == null || (Luong.NgayHetHieuLuc.Value.Year > 2000 && a.Ngay <= Luong.NgayHetHieuLuc))).Select(a => a.IddmCaLamViec).FirstOrDefault();
-                                            CaLamViec = caLamViecs.FirstOrDefault(a => a.IdGuid == Id);
-                                        }
-                                    }
-                                    if (CaLamViec == null)
-                                        CaLamViec = new HRM_dmLichLamViec() { SoGioTrongNgay = 8, SoNgayCongTieuChuan = 26 };
-
-                                    {
-                                        itemAdd.NgayCongTieuChuan = CaLamViec.SoNgayCongTieuChuan ?? 1;
-                                        itemAdd.CaLamViec = CaLamViec.Ten ?? "";
-                                        itemAdd.SoGioMotNgay = CaLamViec.SoGioTrongNgay ?? 0;
-
-                                    }
-                                }
-                                else
-                                {
-                                    var CaLamViec = new HRM_dmLichLamViec();
-
-                                    if (!string.IsNullOrEmpty(item.IdCaLamViec))
-                                        CaLamViec = caLamViecs.FirstOrDefault(a => item.IdCaLamViec.Contains(a.IdGuid));
-                                    else
-                                    {
-                                        string Id = listLichLamViec.Where(a => a.Loai == 0 && a.IdNhanVien == item.IdGuid && !string.IsNullOrEmpty(a.IddmCaLamViec)).Select(a => a.IddmCaLamViec).FirstOrDefault();
-                                        CaLamViec = caLamViecs.FirstOrDefault(a => a.IdGuid == Id);
-                                    }
-
-                                    if (CaLamViec == null)
-                                        CaLamViec = new HRM_dmLichLamViec() { SoGioTrongNgay = 8, SoNgayCongTieuChuan = 26 };
-
-                                    {
-                                        itemAdd.NgayCongTieuChuan = CaLamViec.SoNgayCongTieuChuan ?? 1;
-                                        itemAdd.CaLamViec = CaLamViec.Ten ?? "";
-                                        itemAdd.SoGioMotNgay = CaLamViec.SoGioTrongNgay ?? 0;
-
-                                    }
-                                }
-                                if (itemAdd.LoaiLuong == 3)
-                                {
-                                    itemAdd.SoGioMotNgay = 1;
-                                    itemAdd.NgayCongTieuChuan = 1;
-                                }
-
-                                // tÃ­nh Cong
-                                if (itemAdd.SoGioMotNgay > 0)
-                                {
-                                    double NgayCong = datas.Sum(a => (a.SoGioLamViec ?? 0));
-                                    double NgayCongCaGay = datas.Sum(a => (a.SoGioLamViecCaGay ?? 0));
-                                    itemAdd.NgayCong = datas.Sum(a => (a.SoGioLamViec ?? 0) / (a.SoGioTieuChuan ?? 8));
-                                    itemAdd.NgayCongCaGay = datas.Sum(a => (a.SoGioLamViecCaGay ?? 0) / (a.SoGioTieuChuan ?? 8));
-                                    itemAdd.NgayTangCa = datas.Sum(a => (a.SoGioLamViecTangCa ?? 0) / (a.SoGioTieuChuan ?? 8));
-                                    if (itemAdd.LoaiLuong == 3)
-                                    {
-                                        itemAdd.NgayCong = datas.Sum(a => (a.SoGioLamViec ?? 0));
-                                        itemAdd.NgayCongCaGay = datas.Sum(a => (a.SoGioLamViecCaGay ?? 0));
-                                        itemAdd.NgayTangCa = datas.Sum(a => (a.SoGioLamViecTangCa ?? 0));
-                                    }
-                                }
-                                itemAdd.IdNhanVien = item.IdGuid;
-                                itemAdd.TenNhanVien = item.TenDayDu;
-                                itemAdd.MaNhanVien = item.MaNhanVien;
-                                if (item.NgayNghiViec != null && item.NgayNghiViec.Value.ToString("dd/MM/yyyy") != "01/01/1970")
-                                    itemAdd.NgayNghiViec = item.NgayNghiViec.Value.ToString("dd/MM/yyyy");
-                                if (item.NgayBatDauLamViec != null && item.NgayBatDauLamViec.Value.ToString("dd/MM/yyyy") != "01/01/1970")
-                                    itemAdd.NgayVaoLam = item.NgayBatDauLamViec.Value.ToString("dd/MM/yyyy");
-                                var listIdCoSo = ListQT_BP.Where(a => a.IdQuyTrinh == item.IdGuid).Select(a => a.IdBoPhan).ToList();
-                                var CoSo = listDuAn.Where(a => listIdCoSo.Contains(a.Id)).Select(a => a.TenBoPhan).ToList();
-                                if (CoSo != null)
-                                    itemAdd.MaCoSo = string.Join(",", CoSo);
-                                var BoPhan = listBoPhan.FirstOrDefault(a => a.Id == item.IdBoPhanEOS);
-                                if (BoPhan != null)
-                                {
-                                    itemAdd.MaBoPhan = BoPhan.MaBoPhan;
-                                    itemAdd.TenBoPhan = BoPhan.TenBoPhan;
-                                }
-                                var ChucDanh = listChucDanh.FirstOrDefault(a => a.Id == item.IdChucDanh);
-                                if (ChucDanh != null)
-                                {
-                                    itemAdd.TenChucDanh = ChucDanh.Ten;
-                                }
-                                var ChucVu = listChucVu.FirstOrDefault(a => a.Id == item.IdChucVu);
-                                if (ChucVu != null)
-                                {
-                                    itemAdd.TenChucVu = ChucVu.TenChucVu;
-                                }
-
-                                // phá»¥ cáº¥p
-                                var PhuCaps = listPhuCap.Where(a => a.IdNhanVien == item.IdGuid && a.IdLuong_NhanVien == Luong.IdGuid).ToList();
-                                foreach (var phucap in listPhuCapdb)
-                                {
-                                    HRM_QuyTrinhTinhLuong_PhuCap itemPC = new HRM_QuyTrinhTinhLuong_PhuCap();
-                                    itemPC.IdNhanVien = item.IdGuid;
-                                    if (PhuCaps != null && PhuCaps.Count > 0)
-                                    {
-                                        var pc = PhuCaps.FirstOrDefault(a => a.IddmLoaiPhuCap == phucap.IdGuid);
-                                        if (pc != null)
-                                        {
-                                            double NgayCong = datas.Where(a => a.NgayChamCong >= pc.NgayBatDauHieuLuc).Sum(a => (a.SoGioLamViec ?? 0) / (a.SoGioTieuChuan ?? 8));
-                                            double NgayCongCaGay = datas.Where(a => a.NgayChamCong >= pc.NgayBatDauHieuLuc).Sum(a => (a.SoGioLamViecCaGay ?? 0) / (a.SoGioTieuChuan ?? 8));
-
-                                            if (itemAdd.LoaiLuong == 3)
-                                            {
-                                                NgayCong = datas.Where(a => a.NgayChamCong >= pc.NgayBatDauHieuLuc).Sum(a => (a.SoGioLamViec ?? 0));
-                                                NgayCongCaGay = datas.Where(a => a.NgayChamCong >= pc.NgayBatDauHieuLuc).Sum(a => (a.SoGioLamViecCaGay ?? 0));
-
-                                            }
-                                            double TongSoCong = NgayCong + NgayCongCaGay;
-                                            itemPC.Ma = phucap.Ma;
-                                            itemPC.IdLoaiThoiGian = pc.LoaiPhuCap;
-                                            itemPC.IddmPhuCap = pc.IddmLoaiPhuCap;
-                                            double PhuCap = 0;
-                                            itemPC.SoTienPhuCap = pc.SoTien;
-                                            if (itemAdd.NgayCongTieuChuan > 0)
-                                                PhuCap = (TongSoCong / itemAdd.NgayCongTieuChuan) * pc.SoTien;
-                                            if (phucap.Ma == "PCK-KCT") /// Ä‘á»‘i vá»›i phá»¥ cáº¥p khÃ´ng theo ca chÃ­nh
-                                                itemAdd.PhuCapKhongTheoCongChinh = itemAdd.PhuCapKhongTheoCongChinh + pc.SoTien;
-                                            else
-                                            if (phucap.Ma == "PC.CG" && pc.LoaiPhuCap != 5) /// Ä‘á»‘i vá»›i ca gÃ£y  nhÃ¢n viÃªn sale
-                                            {
-
-                                                PhuCap = ((NgayCongCaGay) / itemAdd.NgayCongTieuChuan) * pc.SoTien;
-                                                itemAdd.PhuCapCongChinh = itemAdd.PhuCapCongChinh + PhuCap;
-
-                                            }
-                                            else
-                                            if (pc.LoaiPhuCap == 5)
-                                            {
-                                                if (phucap.Ma == "PC.NN")  // phá»¥ cáº¥p ngoáº¡i ngá»¯
-                                                {
-                                                    if (TongSoCong >= 15)
-                                                    {
-                                                        PhuCap = pc.SoTien;
-                                                        itemAdd.PhuCapCongChinh = (itemAdd.PhuCapCongChinh) + PhuCap;
-                                                    }
-                                                    else
-                                                    {
-                                                        //PhuCap = (itemAdd.NgayCongCaGay / itemAdd.NgayCongTieuChuan) * pc.SoTien;
-                                                        itemAdd.PhuCapCongChinh = itemAdd.PhuCapCongChinh + PhuCap;
-                                                    }
-                                                }
-                                                else if (phucap.Ma == "PC.CG") // phá»¥ cáº¥p ca gÃ£y
-                                                {
-                                                    if (itemAdd.NgayCongCaGay >= 15)
-                                                    {
-                                                        PhuCap = pc.SoTien;
-                                                        itemAdd.PhuCapCongChinh = itemAdd.PhuCapCongChinh + PhuCap;
-                                                    }
-                                                    else
-                                                    {
-                                                        PhuCap = (NgayCongCaGay / itemAdd.NgayCongTieuChuan) * pc.SoTien;
-                                                        itemAdd.PhuCapCongChinh = itemAdd.PhuCapCongChinh + PhuCap;
-                                                    }
-                                                }
-
-                                            }
-                                            else
-                                            {
-                                                if (TongSoCong >= itemAdd.NgayCongTieuChuan || pc.LoaiPhuCap == 1)
-                                                    PhuCap = pc.SoTien;
-                                                itemAdd.PhuCapCongChinh = (itemAdd.PhuCapCongChinh) + PhuCap;
-                                            }
-
-                                        }
-                                    }
-                                    itemAdd.listPhuCap.Add(itemPC);
-                                }
-                                var NghiLe = listLichNghi.FirstOrDefault(a => a.IdBoPhan == item.IdBoPhanEOS);
-                                if (NghiLe != null)
-                                {
-                                    var NghiLeChiTiets = listLichNghiChiTiet.Where(a => a.IdLichNghiLe == NghiLe.IdLichNghiLe).Distinct().ToList();
-                                    if (NghiLeChiTiets != null && NghiLeChiTiets.Count > 0)
-                                    {
-                                        List<int> Ngays = new List<int>();
-                                        foreach (var ngay in NghiLeChiTiets)
-                                        {
-                                            DateTime time = ngay.TuNgay;
-                                            while (time <= ngay.DenNgay)
-                                            {
-                                                if (time >= NgayBD && time <= NgayKT)
-                                                    Ngays.Add(time.Day);
-                                                time = time.AddDays(1);
-                                            }
-                                        }
-
-                                        var data = datas.Where(a => (a.SoGioLamViec > 0 || a.SoGioLamViecCaGay > 0 || a.SoGioLamViecTangCa > 0) && Ngays.Contains(a.NgayChamCong.Value.Day)).ToList();
-                                        if (data != null && data.Count > 0)
-                                        {
-                                            itemAdd.Le_Tet = 0;
-                                            itemAdd.Le_TetKDL = 0;
-                                            itemAdd.LuongLe = 0;
-                                            itemAdd.LuongLeKDL = 0;
-                                            Ngays = data.Select(a => a.NgayChamCong.Value.Day).Distinct().ToList();
-                                            foreach (var ngay in NghiLeChiTiets)
-                                            {
-                                                if (ngay.TyLeLuong > 1)
-                                                {
-                                                    DateTime time = ngay.TuNgay;
-                                                    while (time <= ngay.DenNgay)
-                                                    {
-                                                        double NgayCong = (double)(Luong.Luong / itemAdd.NgayCongTieuChuan);
-                                                        if (Luong.LoaiLuong == 3)
-                                                            NgayCong = Luong.Luong;
-                                                        if (Ngays.Contains(time.Day))
-                                                        {
-
-
-                                                            var ngayC = data.FirstOrDefault(a => a.NgayChamCong.Value.Day == time.Day);
-                                                            double SoGLV = (ngayC.SoGioLamViec ?? 0) + (ngayC.SoGioLamViecCaGay ?? 0) + (ngayC.SoGioLamViecTangCa ?? 0);
-                                                            double TongCongN = SoGLV / (ngayC.SoGioTieuChuan ?? 8);
-                                                            double TyLe = ngay.TyLeLuong / 100;
-
-                                                            if (itemAdd.LoaiLuong == 3)
-                                                            {
-                                                                TyLe = 2;
-                                                                itemAdd.Le_Tet += SoGLV;
-                                                                itemAdd.LuongLe = itemAdd.LuongLe + SoGLV * itemAdd.LuongCoBan * TyLe;
-
-
-                                                            }
-                                                            else
-                                                            {
-
-                                                                itemAdd.Le_Tet += TongCongN;
-                                                                itemAdd.LuongLe = itemAdd.LuongLe + NgayCong * TongCongN * (TyLe);
-                                                                if (TongCongN < 1)
-                                                                {
-
-                                                                    itemAdd.Le_TetKDL += 1 - TongCongN;
-                                                                    itemAdd.LuongLeKDL = itemAdd.LuongLeKDL + NgayCong * (1 - TongCongN);
-
-                                                                }
-                                                            }
-                                                            itemAdd.NgayCong = itemAdd.NgayCong - (ngayC.SoGioLamViec ?? 0) / (ngayC.SoGioTieuChuan ?? 8);
-                                                            itemAdd.NgayCongCaGay = itemAdd.NgayCongCaGay - (ngayC.SoGioLamViecCaGay ?? 0) / (ngayC.SoGioTieuChuan ?? 8);
-
-                                                            itemAdd.NgayTangCa = itemAdd.NgayTangCa - (ngayC.SoGioLamViecTangCa ?? 0) / (ngayC.SoGioTieuChuan ?? 8);
-                                                            ngayC.isNgayLe = true;
-                                                        }
-                                                        else
-                                                        {
-                                                            List<HRM_ThoiGianLamViecKeHoach> listLichLamViecFind = listLichLamViec.FindAll(x => x.IdNhanVien == item.IdGuid && Ngays.Contains(x.Ngay.Day));
-                                                            if (listLichLamViecFind != null && listLichLamViecFind.Count > 0)
-                                                            {
-                                                                if (itemAdd.LoaiLuong != 3)
-                                                                {
-
-                                                                    itemAdd.Le_TetKDL += 1;
-                                                                    itemAdd.LuongLeKDL = itemAdd.LuongLeKDL + NgayCong;
-                                                                }
-
-                                                            }
-                                                        }
-
-                                                        time = time.AddDays(1);
-                                                    }
-                                                }
-                                            }
-                                        }
-                                        else
-                                        {
-                                            List<HRM_ThoiGianLamViecKeHoach> listLichLamViecFind = listLichLamViec.FindAll(x => x.IdNhanVien == item.IdGuid && Ngays.Contains(x.Ngay.Day));
-                                            if (listLichLamViecFind != null && listLichLamViecFind.Count > 0)
-                                            {
-                                                var lNgays = listLichLamViecFind.Select(a => a.Ngay).Distinct().ToList();
-                                                foreach (var itemLV in lNgays)
-                                                {
-                                                    if (itemAdd.LoaiLuong != 3)
-                                                    {
-                                                        double NgayCong = (double)(Luong.Luong / itemAdd.NgayCongTieuChuan);
-                                                        itemAdd.Le_TetKDL += 1;
-                                                        itemAdd.LuongLeKDL = itemAdd.LuongLeKDL + NgayCong;
-                                                    }
-
-                                                }
-                                            }
-                                        }
-
-
-
-                                    }
-                                }
-                                // ngÃ y cÃ´ng vÃ  LÆ°Æ¡ng
-                                double Cong1Ngay = itemAdd.LuongCoBan / itemAdd.NgayCongTieuChuan;
-                                itemAdd.LuongTheoCong = 0;
-                                #region Old
-                                if (listXinNghiPhep != null && listXinNghiPhep.Count > 0)
-                                {
-                                    itemAdd.NghiPhep = listXinNghiPhep.Where(a => a.IdNhanVien == item.IdGuid && a.NgayNghi >= Luong.NgayBatDauHieuLuc && (Luong.NgayHetHieuLuc == null || (Luong.NgayHetHieuLuc.Value.Year > 2000 && a.NgayNghi <= Luong.NgayHetHieuLuc))).Sum(a => a.ThoiGianNghi);
-                                    itemAdd.LuongPhep = itemAdd.NghiPhep * Cong1Ngay;
-                                    if (itemAdd.LoaiLuong == 3)
-                                        itemAdd.LuongPhep = itemAdd.NghiPhep * itemAdd.SoGioMotNgay * itemAdd.LuongCoBan;
-
-                                }
-                                itemAdd.LuongTheoCong = (itemAdd.NgayCong + itemAdd.NgayCongCaGay) * Cong1Ngay;
-                                if (itemAdd.LoaiLuong == 3)
-                                    itemAdd.LuongTheoCong = (itemAdd.NgayCong + itemAdd.NgayCongCaGay) * itemAdd.LuongCoBan;
-
-                                itemAdd.LuongTangCa = itemAdd.NgayTangCa * Cong1Ngay;
-                                if (itemAdd.LoaiLuong == 3)
-                                    itemAdd.LuongTangCa = itemAdd.NgayTangCa * itemAdd.LuongCoBan;
-                                #endregion
-                                if (itemAdd.NgayTangCa < 0)
-                                    itemAdd.NgayTangCa = 0;
-                                if (itemAdd.LuongTangCa < 0)
-                                    itemAdd.LuongTangCa = 0;
-
-                                if (itemAdd.NgayCong < 0)
-                                    itemAdd.NgayCong = 0;
-                                if (itemAdd.NgayCongCaGay < 0)
-                                    itemAdd.NgayCongCaGay = 0;
-                                if (itemAdd.Le_TetKDL < 0.1)
-                                {
-                                    itemAdd.Le_TetKDL = 0;
-                                    itemAdd.LuongLeKDL = 0;
-                                }
-                                itemAdd.TongLuong = itemAdd.LuongTheoCong + itemAdd.LuongTangCa + itemAdd.LuongPhep + itemAdd.LuongNghiBu + itemAdd.LuongLe + itemAdd.LuongLeKDL + itemAdd.PhuCapCongChinh + itemAdd.PhuCapKhongTheoCongChinh;
-                                double TongCong = itemAdd.NgayCong + itemAdd.NgayCongCaGay + itemAdd.NghiPhep + itemAdd.Le_Tet + itemAdd.NghiBu + itemAdd.NgayTangCa;
-                                if (((item.ThangTruyThuBHXH != null && item.ThangTruyThuBHXH >= NgayBD && item.ThangTruyThuBHXH <= NgayBD) || (item.ThangTruyThuBHYT != null && item.ThangTruyThuBHYT >= NgayBD && item.ThangTruyThuBHYT <= NgayBD)))
-                                {
-                                    itemAdd.TruyThu = itemAdd.LuongDongBHXH * ((item.PhanTramTruyThuBHYT ?? 0) + (item.PhanTramTruyThuBHXH ?? 0)) / 100;
-                                }
-                                if (Luong.LuongHachToan > 0 && Luong.LoaiLuong == 1)
-                                {
-                                    if (isDaTinhBHXH == false)
-                                    {
-                                        DateTime TuNgay = listLuongNV.Where(a => a.LoaiLuong == 1 && a.LuongHachToan > 0).OrderBy(a => a.NgayBatDauHieuLuc).Select(a => a.NgayBatDauHieuLuc).FirstOrDefault();
-                                        DateTime? DenNgay = listLuongNV.Where(a => a.LoaiLuong == 1 && a.LuongHachToan > 0).OrderByDescending(a => a.NgayBatDauHieuLuc).Select(a => a.NgayHetHieuLuc).FirstOrDefault();
-
-                                        if (listdatas.Where(a => a.NgayChamCong >= TuNgay && (DenNgay == null || (DenNgay.Value.Year > 2000 && DenNgay >= a.NgayChamCong))).Sum(a => (a.SoGioLamViec ?? 0) + (a.SoGioLamViecCaGay ?? 0) + (a.SoGioLamViecTangCa ?? 0)) / (itemAdd.SoGioMotNgay == 1 ? 8 : itemAdd.SoGioMotNgay) > 14)
-                                        {
-                                            itemAdd.MucDongBaoHiemXaHoi = itemAdd.LuongDongBHXH;
-                                            itemAdd.SDLDBHXH = itemAdd.MucDongBaoHiemXaHoi * 17.5 / 100;
-                                            itemAdd.SDLDBHYT = itemAdd.MucDongBaoHiemXaHoi * 3 / 100;
-                                            itemAdd.SDLDBHTN = itemAdd.MucDongBaoHiemXaHoi * 1 / 100;
-                                            itemAdd.TongNguoiSDLD = itemAdd.SDLDBHXH + itemAdd.SDLDBHYT + itemAdd.SDLDBHTN;
-                                            itemAdd.NLDBHXH = itemAdd.MucDongBaoHiemXaHoi * 8 / 100;
-                                            itemAdd.NLDBHYT = itemAdd.MucDongBaoHiemXaHoi * 1.5 / 100;
-                                            itemAdd.NLDBHTN = itemAdd.MucDongBaoHiemXaHoi * 1 / 100;
-                                            itemAdd.TongNguoiNLD = itemAdd.NLDBHXH + itemAdd.NLDBHYT + itemAdd.NLDBHTN;
-                                        }
-                                        isDaTinhBHXH = true;
-                                    }
-                                }
-
-                                if (STT == listLuongNV.Count())
-                                {
-                                    listLuongCheck.Add(itemAdd);
-                                    // thuáº¿ thu nháº­p cÃ¡ nhÃ¢n
-                                    var QuanHes = listNguoiThan.Where(a => a.IdNhanVien == item.IdGuid).ToList();
-                                    itemAdd.SoGiamTruBanThan = 11000000;
-                                    itemAdd.SpNguoiDangKyNPT = QuanHes.Count;
-                                    itemAdd.TongTienGiamTruGiaCanh = itemAdd.SoGiamTruBanThan + itemAdd.SpNguoiDangKyNPT * 4400000;
-                                    itemAdd.ThuNhapMienThue = listLuongCheck.Sum(a => a.LuongLe + a.LuongLeKDL + +a.TongNguoiNLD);
-                                    if (listLuongCheck.Sum(a => a.TongLuong) - itemAdd.TongTienGiamTruGiaCanh - itemAdd.ThuNhapMienThue > 0)
-                                        itemAdd.ThuNhapTinhThueTNCN = listLuongCheck.Sum(a => a.TongLuong) - itemAdd.TongTienGiamTruGiaCanh - itemAdd.ThuNhapMienThue;
-                                    else
-                                        itemAdd.ThuNhapTinhThueTNCN = 0;
-                                    itemAdd.ThueTNCNTheoLuyTien = TinhThue(itemAdd.ThuNhapTinhThueTNCN, listCauHinh);
-                                    // cáº¥p phÃ¡t tÃ i sáº£n
-                                    if (listCapPhatTaiSan != null)
-                                    {
-                                        var listTaiSan = listCapPhatTaiSan.Where(a => a.IdNhanVien == item.IdGuid).ToList();
-                                        if (listTaiSan != null && listTaiSan.Count > 0)
-                                        {
-                                            var capPhat = listTaiSan.Where(a => a.Loai == 1).ToList();
-                                            if (capPhat != null && capPhat.Count > 0)
-                                                itemAdd.DongPhuc = capPhat.Sum(a => (a.SoLuongCapPhat ?? 0) * (a.GiaTriCapPhat ?? 0));
-                                            var ThuHoi = listTaiSan.Where(a => a.Loai == 1).ToList();
-                                            if (ThuHoi != null && ThuHoi.Count > 0)
-                                                itemAdd.TraTienDongPhuc = ThuHoi.Sum(a => (a.SoLuongThuHoi ?? 0) * (a.GiaTriThuHoi ?? 0));
-
-                                        }
-                                    }
-                                    itemAdd.KhauTruTaiNguon = 0;
-                                    itemAdd.isCamKet = item.isCamKet;
-                                    if (listLuongCheck.Sum(a => a.MucDongBaoHiemXaHoi) == 0 && item.isCamKet == false)
-                                        itemAdd.KhauTruTaiNguon = itemAdd.TongLuong * 0.1;
-                                    itemAdd.TongGiamThueTNCN = itemAdd.ThueTNCNTheoLuyTien + itemAdd.KhauTruTaiNguon;
-                                    if (itemAdd.TongGiamThueTNCN < 50000)
-                                        itemAdd.TongGiamThueTNCN = 0;
-                                }
-                                else
-                                    listLuongCheck.Add(itemAdd);
-                                STT++;
-                                itemAdd.TienThucNhan = itemAdd.TongLuong - itemAdd.ThueTNCNTheoLuyTien - itemAdd.TongNguoiNLD - (itemAdd.TongGiamThueTNCN ?? 0) - (itemAdd.TongGiamThueTNCN ?? 0);
-                                listResult.Add(itemAdd);
-                            }
-                        }
-                    }
-                }
-                List<HRM_QuyTrinhTinhLuong_TangCa> listTangCa = new List<HRM_QuyTrinhTinhLuong_TangCa>();
-                List<HRM_QuyTrinhTinhLuong_SoGioLamViec> listGioTieuChuans = new List<HRM_QuyTrinhTinhLuong_SoGioLamViec>();
-                if (listResult.Count > 0)
-                {
-                    listTangCa = listResult.FirstOrDefault().listTangCa;
-                    listGioTieuChuans = listResult.FirstOrDefault().listGioTieuChuan;
-                }
-                QuyTrinh = GetListHeaderNew(QuyTrinh, listTangCa, listGioTieuChuans, IdCongTy, db, IdBoPhan);
+                var batch = HRM.Api.Services.Payroll.PhtPayrollCalculator.Calculate(
+                    IdCongTy, IdBoPhan, NgayBD, NgayKT, listData, db, _CallWebService, TinhThue);
+                var listResult = batch.SalaryLines;
+                var first = listResult.FirstOrDefault();
+                QuyTrinh = GetListHeaderNew(QuyTrinh, first?.listTangCa ?? new List<HRM_QuyTrinhTinhLuong_TangCa>(), first?.listGioTieuChuan ?? new List<HRM_QuyTrinhTinhLuong_SoGioLamViec>(), IdCongTy, db, IdBoPhan);
                 QuyTrinh.listNhanVien = listResult.OrderBy(a => a.NgayVaoLam).ToList();
-                //if (LoaiLuong == 0)
-                QuyTrinh.listGiaTriNhanVien = GetListGiatriPHT(QuyTrinh.listHeader_Data, listResult, listNhanVien, listHopDong, db);
-                //else
-                //    QuyTrinh.listGiaTriNhanVien = GetListGiatriPHT(QuyTrinh.listHeader_Data, listResult.Where(a => a.LoaiLuong == LoaiLuong).ToList(), listNhanVien, listHopDong, db);
+                QuyTrinh.listGiaTriNhanVien = GetListGiatriPHT(QuyTrinh.listHeader_Data, listResult, batch.Employees, batch.Contracts, db);
             }
             else
             {
-                HRM_QuyTrinhTinhLuong_NhanVien Add = new HRM_QuyTrinhTinhLuong_NhanVien();
-                List<HRM_QuyTrinhTinhLuong_TangCa> listTangCa = new List<HRM_QuyTrinhTinhLuong_TangCa>();
-                List<HRM_QuyTrinhTinhLuong_SoGioLamViec> listGioTieuChuans = new List<HRM_QuyTrinhTinhLuong_SoGioLamViec>();
-                if (listResult.Count > 0)
-                {
-                    listTangCa = listResult.FirstOrDefault().listTangCa;
-                    listGioTieuChuans = listResult.FirstOrDefault().listGioTieuChuan;
-                }
-                QuyTrinh = GetListHeaderNew(QuyTrinh, listTangCa, listGioTieuChuans, IdCongTy, db, IdBoPhan);
-                listResult.Add(Add);
+                QuyTrinh = GetListHeaderNew(QuyTrinh, new List<HRM_QuyTrinhTinhLuong_TangCa>(), new List<HRM_QuyTrinhTinhLuong_SoGioLamViec>(), IdCongTy, db, IdBoPhan);
             }
             return QuyTrinh;
         }
-
         public dynamic GetTinhLuongNhanVienTheoKyExcel(string FileName, double TuNgay, double DenNgay, ApplicationDbContext db)
         {
 

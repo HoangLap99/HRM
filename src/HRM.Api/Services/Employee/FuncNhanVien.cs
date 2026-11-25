@@ -9005,4 +9005,215 @@ namespace HRM.Api.Services
                         ngonNgu.IdNhanVien = aModel.IdGuid;
                         if (ngonNgu.lstFileDinhKem.IsNotEmpty())
                             FileUploadController.SetFileDinhKem(_dbContext, ngonNgu.lstFileDinhKem, nameof(HRM_NgonNguNhanVien).ToString(), ngonNgu.IdGuid);
-... [truncated for diff preview]
+                        //listFileCreate.Add(new EntityAddFileDinhKemModel(ngonNgu.lstFileDinhKemMoi, ngonNgu.IdGuid, nameof(HRM_NgonNguNhanVien), DefineData.eFlagDinhKem.FileDinhKem));
+
+                    }
+                    _dbContext.HRM_NgonNguNhanVien.AddRange(aModel.ListNhanVienNgonNgu);
+                }
+                #endregion
+                #region Chứng chỉ
+                if (aModel.ListNhanVienChungChi.IsNotEmpty())
+                {
+                    foreach (var chungChi in aModel.ListNhanVienChungChi)
+                    {
+                        chungChi.UnixToDateTime();
+                        //if (string.IsNullOrEmpty(chungChi.IdGuid))
+                        chungChi.IdGuid = Guid.NewGuid().ToString();
+                        chungChi.IdNhanVien = aModel.IdGuid;
+                        if (chungChi.lstFileDinhKem.IsNotEmpty())
+                            FileUploadController.SetFileDinhKem(_dbContext, chungChi.lstFileDinhKem, nameof(HRM_ChungChiNhanVien).ToString(), chungChi.IdGuid);
+                        //listFileCreate.Add(new EntityAddFileDinhKemModel(chungChi.lstFileDinhKemMoi, chungChi.IdGuid, nameof(HRM_ChungChiNhanVien), DefineData.eFlagDinhKem.FileDinhKem));
+
+
+                    }
+                    _dbContext.HRM_ChungChiNhanVien.AddRange(aModel.ListNhanVienChungChi);
+                }
+                #endregion
+                #region  Quá trình công tác
+                if (aModel.ListQuaTrinhCongTac.IsNotEmpty())
+                {
+                    foreach (var congTac in aModel.ListQuaTrinhCongTac)
+                    {
+                        //if (string.IsNullOrEmpty(congTac.IdGuid))
+                        congTac.IdGuid = Guid.NewGuid().ToString();
+                        congTac.IdNhanVien = aModel.IdGuid;
+                        if (congTac.lstFileDinhKem.IsNotEmpty())
+                            FileUploadController.SetFileDinhKem(_dbContext, congTac.lstFileDinhKem, nameof(HRM_QuaTrinhCongTac).ToString(), congTac.IdGuid);
+                        //listFileCreate.Add(new EntityAddFileDinhKemModel(congTac.lstFileDinhKemMoi, congTac.IdGuid, nameof(HRM_QuaTrinhCongTac), DefineData.eFlagDinhKem.FileDinhKem));
+
+                    }
+                    _dbContext.HRM_QuaTrinhCongTac.AddRange(aModel.ListQuaTrinhCongTac);
+                }
+                #endregion
+                #region  Quá trình công tác nước ngoài
+                if (aModel.ListQuaTrinhCongTacNgoaiCongTy.IsNotEmpty())
+                {
+                    foreach (var congTac in aModel.ListQuaTrinhCongTacNgoaiCongTy)
+                    {
+                        //if (string.IsNullOrEmpty(congTac.IdGuid))
+                        congTac.IdGuid = Guid.NewGuid().ToString();
+                        congTac.IdNhanVien = aModel.IdGuid;
+                        if (congTac.lstFileDinhKem.IsNotEmpty())
+                            FileUploadController.SetFileDinhKem(_dbContext, congTac.lstFileDinhKem, nameof(HRM_QuaTrinhCongTacNgoaiCongTy).ToString(), congTac.IdGuid);
+                        //listFileCreate.Add(new EntityAddFileDinhKemModel(congTac.lstFileDinhKemMoi, congTac.IdGuid, nameof(HRM_QuaTrinhCongTacNgoaiCongTy), DefineData.eFlagDinhKem.FileDinhKem));
+
+                    }
+                    _dbContext.HRM_QuaTrinhCongTacNgoaiCongTy.AddRange(aModel.ListQuaTrinhCongTacNgoaiCongTy);
+                }
+                #endregion
+
+                #region Ngân hàng
+                if (aModel.ListNganHang.IsNotEmpty())
+                {
+                    foreach (var nganHang in aModel.ListNganHang)
+                    {
+                        nganHang.IdGuid = Guid.NewGuid().ToString();
+                        nganHang.idNhanVien = aModel.IdGuid;
+
+                    }
+                    _dbContext.HRM_NhanVien_TaiKhoanNganHang.AddRange(aModel.ListNganHang);
+                }
+                #endregion
+                #region Quan hệ gia đình
+                if (aModel.ListQuanHeGiaDinhNhanVien.IsNotEmpty())
+                {
+                    foreach (var giaDinh in aModel.ListQuanHeGiaDinhNhanVien)
+                    {
+                        if (giaDinh.NgaySinhUnix > 0)
+                            giaDinh.NgaySinh = dungchung.UnixTimeStampToDateTime(giaDinh.NgaySinhUnix);
+                        //if (string.IsNullOrEmpty(giaDinh.IdGuid))
+                        giaDinh.IdGuid = Guid.NewGuid().ToString();
+                        giaDinh.IdNhanVien = aModel.IdGuid;
+                        if (giaDinh.lstFileDinhKem.IsNotEmpty())
+                            FileUploadController.SetFileDinhKem(_dbContext, giaDinh.lstFileDinhKem, nameof(HRM_NhanVienQuanHeGiaDinh).ToString(), giaDinh.IdGuid);
+                        //listFileCreate.Add(new EntityAddFileDinhKemModel(giaDinh.lstFileDinhKemMoi, giaDinh.IdGuid, nameof(HRM_NhanVienQuanHeGiaDinh), DefineData.eFlagDinhKem.FileDinhKem));
+
+                    }
+                    _dbContext.HRM_NhanVienQuanHeGiaDinh.AddRange(aModel.ListQuanHeGiaDinhNhanVien);
+                }
+                #endregion
+                _dbContext.SaveChanges();
+
+
+                result = new MessageReturn(DefineData.eErrorMessage.CapNhatThanhCong, "Cập nhật dữ liệu nhân viên thành công", aModel.IdGuid);
+
+            }
+            catch (Exception ex)
+            {
+
+                return new MessageReturn(DefineData.eErrorMessage.LoiCapNhat, ex.ToString());
+            }
+
+
+            return result;
+        }
+    }
+    public class DH_TimKiemNhanVien
+    {
+        public long IdCongTy { get; set; }
+        public List<string> IdUsers { get; set; }
+    }
+    public class SearchNhanVienViewModel
+    {
+        public string KeyWord { set; get; }
+        public int CurrentPage { set; get; }
+        public int PageSize { set; get; }
+        public long IdCongTyEOS { set; get; }
+        //public double TuNgayUnix { set; get; }
+        //public double ToiNgayUnix { set; get; }
+        public int TrangThaiNhanVien { set; get; } // 0 tất cả,1 "DangLamViec" ,2 "DaNghiViec" 3, Sắp nghỉ hưu
+        public int TrangThaiHopDong { set; get; } ///0 tất cả- 1 săp hết hạn hợp đồng
+        //  public string GioiTinh { set; get; }
+    }
+    public class BaoCaoNhanVienViewModel
+    {
+
+        public string IdNhanVien { set; get; }
+        public string IddmTrinhDo { set; get; }
+        public string TrinhDoChuyenMon { set; get; }
+        public string DiaChi { set; get; }
+        public DateTime? NgayBatDauLamViec { set; get; }
+        public double NgayBatDauLamViecUnix { set; get; }
+        public string TenNhanVien { set; get; }
+        public string MaNhanVien { set; get; }
+        public string Email { set; get; }
+        public string TrangThai { set; get; }
+        public long IdCongTyEOS { set; get; }
+        public string TenCongTyEOS { set; get; }
+        public long IddmChucVu { set; get; }
+        public string TenChucVu { set; get; }
+        public string DienThoai { set; get; }
+        public DateTime? NgaySinh { set; get; }
+        public double NgaySinhUnix { set; get; }
+        public DateTime? NgayNghiViec { set; get; }
+        public double NgayNghiViecUnix { set; get; }
+        public string GioiTinh { set; get; }
+        public DateTime? NgayHieuLuc { set; get; }
+        public double NgayHieuLucUnix { set; get; }
+        public DateTime? NgayHetHan { set; get; }
+        public double NgayHetHanUnix { set; get; }
+        public string TenTrangThaiNhanVien { set; get; }
+        public int TrangThaiHopDong { set; get; } ///0 tất cả- 1 Sắp về hưu - 2 săp hết hạn hợp đồng
+        public string TenTrangThaiHopDong { set; get; }
+
+    }
+    public class NhanVienBoPhanViewModel
+    {
+
+        public string IdNhanVien { set; get; }
+        public string IdHopDong { set; get; }
+        public long IdBoPhanEOS { set; get; }
+        public long IdChucVuEOS { set; get; }
+        public long IddmChucVu { set; get; }
+        public long IddmChucDanh { set; get; }
+        public string TenChucVu { set; get; }
+        public string IdUser { set; get; }
+        public string TenNhanVien { set; get; }
+        public string TenBoPhan { set; get; }
+        public string MaNhanVien { set; get; }
+
+    }
+
+    public class NhatKyNhanVienViewModel
+    {
+        public string IdGuid { set; get; }
+        public string IdNhanVien { set; get; }
+
+        public string TenNhanVien { set; get; }
+
+        public string IdTable { set; get; }
+
+        public string TableName { set; get; }
+        public string eAction { set; get; }
+
+        public string Link { set; get; }
+        public int Loai { set; get; }
+
+        public string QuyTrinh { set; get; }
+        public DateTime ThoiGian { set; get; }
+
+        public double ThoiGianUnix { set; get; }
+        public List<HRM_FileDinhKem> listFileDinhKem { get; set; }
+    }
+
+    public class NhanVienCongTyViewModel
+    {
+        public string IdUser { set; get; }
+        public string IdGuid { set; get; }
+        public string TenDayDu { set; get; }
+        public string MaNhanVien { set; get; }
+
+        public long IdCongTyEOS { set; get; }
+        public long IdBoPhanEOS { set; get; }
+        public string TenBoPhan { set; get; }
+        public long IddmChucVu { set; get; }
+        public string TenChucVu { set; get; }
+        public long IddmChucDanh { set; get; }
+        public string IdGioiTinh { set; get; }
+        public string IddmTrinhDo { set; get; }
+        public long IdNhanVienEOS { set; get; }
+        public string IdLoaiNhanVien { set; get; }
+        public string IdQuocTich { set; get; }
+
+    }
+}
